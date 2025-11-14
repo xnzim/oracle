@@ -43,7 +43,6 @@ Use `bun run start` if you prefer invoking the script through the package.json s
 | `-m, --model <name>` | Choose `gpt-5-pro` (default) or `gpt-5.1`. The latter automatically sets `reasoning.effort` to `high`. |
 | `--search` | Adds the platform-provided `web_search_preview` tool so the model can cite fresh sources (default enabled). Use `--no-search` to disable. |
 | `--max-input <tokens>` | Override the 196k token preflight guard if you know the model’s current limit is higher. |
-| `--max-output <tokens>` | Tell the Responses API to stop generating after this many tokens. |
 | `--system <text>` | Replace the default “Oracle” system prompt. |
 | `--files-report` | Print a sorted table of attached files with their token counts and percentage of the input budget (auto-enabled when files exceed the budget). |
 | `--preview` | Print the token budget summary and exit before hitting the API. |

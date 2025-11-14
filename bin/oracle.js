@@ -21,7 +21,6 @@ program
   .option('--search', 'Allow the model to make server-side web_search tool calls.', true)
   .option('--max-input <tokens>', 'Override the max input token budget (defaults to the model limit).', parseIntOption)
   .option('--system <text>', 'Override the default system prompt.')
-  .option('--max-output <tokens>', 'Hard limit for output tokens (optional).', parseIntOption)
   .option('--files-report', 'Show token usage per attached file (also prints automatically when files exceed the token budget).', false)
   .option('--preview', 'Preview the request and token usage without making an API call.', false)
   .option('--preview-json', 'When using --preview, also dump the full JSON payload.', false)
