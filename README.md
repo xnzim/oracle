@@ -1,7 +1,7 @@
 # oracle — The All-Knowing AI courier
 
 <p align="center">
-  <img src="./README-header.png" alt="Oracle CLI header banner" width="720">
+  <img src="./README-header.png" alt="Oracle CLI header banner" width="1200">
 </p>
 
 <p align="center">
