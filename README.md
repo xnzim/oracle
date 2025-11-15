@@ -15,20 +15,18 @@ Oracle is a one-shot CLI for GPT-5 Pro / GPT-5.1 when you need deep reasoning pl
 ## Quick start
 
 ```bash
-pnpm install
+# One-off run (no install needed)
+OPENAI_API_KEY=sk-... npx @steipete/oracle --prompt "Summarize the risk register" --file docs/risk-register.md
 
-# Responses API path (requires an OPENAI_API_KEY)
-OPENAI_API_KEY=sk-... pnpm run oracle -- \
-  --prompt "Summarize the risk register" \
-  --file docs/risk-register.md docs/risk-matrix.md
+# Local install for repeat use
+pnpm install
+pnpm run oracle -- --prompt "Summarize the risk register" --file docs/risk-register.md docs/risk-matrix.md
 
 # Browser path (no API key needed)
-pnpm run oracle -- --engine browser --prompt "Summarize the risk register" \
-  --file docs/risk-register.md docs/risk-matrix.md
+pnpm run oracle -- --engine browser --prompt "Summarize the risk register" --file docs/risk-register.md docs/risk-matrix.md
 
 # Globs/exclusions (skip tests, only TypeScript sources)
-pnpm run oracle -- --prompt "Review the TS data layer" \
-  --file "src/**/*.ts" --file "!src/**/*.test.ts"
+pnpm run oracle -- --prompt "Review the TS data layer" --file "src/**/*.ts" --file "!src/**/*.test.ts"
 ```
 
 Prefer the compiled binary? `pnpm run build && node dist/bin/oracle.js --prompt ...` works too. Whether you hit the API or the browser, attach the files/directories that explain the issue and run `--files-report` to stay within the ~196k-token window (legacy `--browser` still works but is deprecated in favor of `--engine browser`).
