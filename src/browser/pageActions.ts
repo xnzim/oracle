@@ -773,8 +773,15 @@ async function logConversationSnapshot(Runtime: ChromeClient['Runtime'], logger:
 }
 
 async function logDomFailure(Runtime: ChromeClient['Runtime'], logger: BrowserLogger, context: string) {
+  if (!logger?.verbose) {
+    return;
+  }
   try {
-    logger(`Browser automation failure (${context}); capturing DOM snapshot for debugging...`);
+    const entry = `Browser automation failure (${context}); capturing DOM snapshot for debugging...`;
+    logger(entry);
+    if (logger.sessionLog && logger.sessionLog !== logger) {
+      logger.sessionLog(entry);
+    }
     await logConversationSnapshot(Runtime, logger);
   } catch {
     // ignore snapshot failures

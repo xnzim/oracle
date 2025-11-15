@@ -33,7 +33,13 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
   const attachments: BrowserAttachment[] = options.attachments ?? [];
 
   const config = resolveBrowserConfig(options.config);
-  const logger: BrowserLogger = options.log ?? (() => {});
+  const logger: BrowserLogger = options.log ?? ((message: string) => {});
+  if (logger.verbose === undefined) {
+    logger.verbose = Boolean(config.debug);
+  }
+  if (logger.sessionLog === undefined && options.log?.sessionLog) {
+    logger.sessionLog = options.log.sessionLog;
+  }
   if (config.debug || process.env.CHATGPT_DEVTOOLS_TRACE === '1') {
     logger(
       `[browser-mode] config: ${JSON.stringify({

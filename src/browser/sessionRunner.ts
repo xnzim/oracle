@@ -5,6 +5,7 @@ import type { BrowserSessionConfig, BrowserRuntimeMetadata } from '../sessionMan
 import { runBrowserMode } from '../browserMode.js';
 import { assembleBrowserPrompt } from './prompt.js';
 import { BrowserAutomationError } from '../oracle/errors.js';
+import type { BrowserLogger } from './types.js';
 
 export interface BrowserExecutionResult {
   usage: {
@@ -54,6 +55,14 @@ export async function runBrowserSessionExecution(
     }
   }
   const headerLine = `Oracle (${cliVersion}) launching browser mode (${runOptions.model}) with ~${promptArtifacts.estimatedInputTokens.toLocaleString()} tokens`;
+  const automationLogger: BrowserLogger = ((message?: string) => {
+    if (typeof message === 'string') {
+      log(message);
+    }
+  }) as BrowserLogger;
+  automationLogger.verbose = Boolean(runOptions.verbose);
+  automationLogger.sessionLog = log;
+
   log(headerLine);
   log(chalk.dim('Chrome automation does not stream output; this may take a minute...'));
   let browserResult;
@@ -62,7 +71,7 @@ export async function runBrowserSessionExecution(
       prompt: promptArtifacts.composerText,
       attachments: promptArtifacts.attachments,
       config: browserConfig,
-      log,
+      log: automationLogger,
       heartbeatIntervalMs: runOptions.heartbeatIntervalMs,
       verbose: runOptions.verbose,
     });

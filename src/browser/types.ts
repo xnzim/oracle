@@ -24,7 +24,10 @@ export interface PuppeteerCookie {
   HttpOnly?: boolean;
 }
 
-export type BrowserLogger = (message: string) => void;
+export type BrowserLogger = ((message: string) => void) & {
+  verbose?: boolean;
+  sessionLog?: (message: string) => void;
+};
 
 export interface BrowserAttachment {
   path: string;
@@ -50,7 +53,7 @@ export interface BrowserRunOptions {
   prompt: string;
   attachments?: BrowserAttachment[];
   config?: BrowserAutomationConfig;
-  log?: (message: string) => void;
+  log?: BrowserLogger;
   heartbeatIntervalMs?: number;
   verbose?: boolean;
 }
