@@ -2,7 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { resolveBrowserConfig } from './config.js';
-import type { BrowserRunOptions, BrowserRunResult, BrowserLogger } from './types.js';
+import type { BrowserRunOptions, BrowserRunResult, BrowserLogger, ChromeClient, BrowserAttachment } from './types.js';
 import { launchChrome, registerTerminationHooks, hideChromeWindow, connectToChrome } from './chromeLifecycle.js';
 import { syncCookies } from './cookies.js';
 import {
@@ -14,6 +14,7 @@ import {
   waitForAssistantResponse,
   captureAssistantMarkdown,
   uploadAttachmentFile,
+  waitForAttachmentCompletion,
 } from './pageActions.js';
 import { estimateTokenCount } from './utils.js';
 
@@ -27,8 +28,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
     throw new Error('Prompt text is required when using browser mode.');
   }
 
-  const attachmentFilePath = options.attachmentFilePath ?? null;
-  let attachmentRemoved = attachmentFilePath ? false : true;
+  const attachments: BrowserAttachment[] = options.attachments ?? [];
 
   const config = resolveBrowserConfig(options.config);
   const logger: BrowserLogger = options.log ?? (() => {});
@@ -59,6 +59,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
   let answerHtml = '';
   let runStatus: 'attempted' | 'complete' = 'attempted';
   let connectionClosedUnexpectedly = false;
+  let stopThinkingMonitor: (() => void) | null = null;
 
   try {
     client = await connectToChrome(chrome.port, logger);
@@ -105,20 +106,26 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
       await ensurePromptReady(Runtime, config.inputTimeoutMs, logger);
       logger(`Prompt textarea ready (after model switch, ${promptText.length.toLocaleString()} chars queued)`);
     }
-    if (attachmentFilePath) {
-      const fileLabel = path.basename(attachmentFilePath);
-      logger(`Uploading attachment bundle: ${fileLabel}`);
-      await uploadAttachmentFile({ runtime: Runtime, dom: DOM }, attachmentFilePath, logger);
-      await rm(attachmentFilePath, { force: true }).catch(() => undefined);
-      attachmentRemoved = true;
-      logger(`Removed temporary attachment file: ${fileLabel}`);
+    if (attachments.length > 0) {
+      if (!DOM) {
+        throw new Error('Chrome DOM domain unavailable while uploading attachments.');
+      }
+      for (const attachment of attachments) {
+        logger(`Uploading attachment: ${attachment.displayPath}`);
+        await uploadAttachmentFile({ runtime: Runtime, dom: DOM }, attachment, logger);
+      }
+      const waitBudget = Math.max(config.inputTimeoutMs ?? 30_000, 30_000);
+      await waitForAttachmentCompletion(Runtime, waitBudget, logger);
+      logger('All attachments uploaded');
     }
     await submitPrompt({ runtime: Runtime, input: Input }, promptText, logger);
+    stopThinkingMonitor = startThinkingStatusMonitor(Runtime, logger);
     const answer = await waitForAssistantResponse(Runtime, config.timeoutMs, logger);
     answerText = answer.text;
     answerHtml = answer.html ?? '';
     const copiedMarkdown = await captureAssistantMarkdown(Runtime, answer.meta, logger);
     answerMarkdown = copiedMarkdown ?? answerText;
+    stopThinkingMonitor?.();
     runStatus = 'complete';
     const durationMs = Date.now() - startedAt;
     const answerChars = answerText.length;
@@ -136,6 +143,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
     };
   } catch (error) {
     const normalizedError = error instanceof Error ? error : new Error(String(error));
+    stopThinkingMonitor?.();
     const socketClosed = connectionClosedUnexpectedly || isWebSocketClosureError(normalizedError);
     connectionClosedUnexpectedly = connectionClosedUnexpectedly || socketClosed;
     if (!socketClosed) {
@@ -161,9 +169,6 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
       // ignore
     }
     removeTerminationHooks?.();
-    if (!attachmentRemoved && attachmentFilePath) {
-      await rm(attachmentFilePath, { force: true }).catch(() => undefined);
-    }
     if (!config.keepBrowser) {
       if (!connectionClosedUnexpectedly) {
         try {
@@ -195,6 +200,7 @@ export {
   waitForAssistantResponse,
   captureAssistantMarkdown,
   uploadAttachmentFile,
+  waitForAttachmentCompletion,
 } from './pageActions.js';
 
 function isWebSocketClosureError(error: Error): boolean {
@@ -205,4 +211,108 @@ function isWebSocketClosureError(error: Error): boolean {
     message.includes('websocket error') ||
     message.includes('target closed')
   );
+}
+
+function startThinkingStatusMonitor(Runtime: ChromeClient['Runtime'], logger: BrowserLogger): () => void {
+  let stopped = false;
+  let pending = false;
+  let lastMessage: string | null = null;
+  const interval = setInterval(async () => {
+    if (stopped || pending) {
+      return;
+    }
+    pending = true;
+    try {
+      const nextMessage = await readThinkingStatus(Runtime);
+      if (nextMessage && nextMessage !== lastMessage) {
+        lastMessage = nextMessage;
+        logger(`Thinking status: ${nextMessage}`);
+      }
+    } catch {
+      // ignore DOM polling errors
+    } finally {
+      pending = false;
+    }
+  }, 1500);
+  interval.unref?.();
+  return () => {
+    if (stopped) {
+      return;
+    }
+    stopped = true;
+    clearInterval(interval);
+  };
+}
+
+async function readThinkingStatus(Runtime: ChromeClient['Runtime']): Promise<string | null> {
+  const expression = buildThinkingStatusExpression();
+  try {
+    const { result } = await Runtime.evaluate({ expression, returnByValue: true });
+    const value = typeof result.value === 'string' ? result.value.trim() : '';
+    const sanitized = sanitizeThinkingText(value);
+    return sanitized || null;
+  } catch {
+    return null;
+  }
+}
+
+function sanitizeThinkingText(raw: string): string {
+  if (!raw) {
+    return '';
+  }
+  const trimmed = raw.trim();
+  const prefixPattern = /^(pro thinking)\s*[•:\-–—]*\s*/i;
+  if (prefixPattern.test(trimmed)) {
+    return trimmed.replace(prefixPattern, '').trim();
+  }
+  return trimmed;
+}
+
+function buildThinkingStatusExpression(): string {
+  const selectors = [
+    'span.loading-shimmer',
+    'span.flex.items-center.gap-1.truncate.text-start.align-middle.text-token-text-tertiary',
+    '[data-testid*="thinking"]',
+    '[data-testid*="reasoning"]',
+    '[role="status"]',
+    '[aria-live="polite"]',
+  ];
+  const keywords = ['pro thinking', 'thinking', 'reasoning', 'clarifying', 'planning', 'drafting', 'summarizing'];
+  const selectorLiteral = JSON.stringify(selectors);
+  const keywordsLiteral = JSON.stringify(keywords);
+  return `(() => {
+    const selectors = ${selectorLiteral};
+    const keywords = ${keywordsLiteral};
+    const nodes = new Set();
+    for (const selector of selectors) {
+      document.querySelectorAll(selector).forEach((node) => nodes.add(node));
+    }
+    document.querySelectorAll('[data-testid]').forEach((node) => nodes.add(node));
+    for (const node of nodes) {
+      if (!(node instanceof HTMLElement)) {
+        continue;
+      }
+      const text = node.textContent?.trim();
+      if (!text) {
+        continue;
+      }
+      const classLabel = (node.className || '').toLowerCase();
+      const dataLabel = ((node.getAttribute('data-testid') || '') + ' ' + (node.getAttribute('aria-label') || ''))
+        .toLowerCase();
+      const normalizedText = text.toLowerCase();
+      const matches = keywords.some((keyword) =>
+        normalizedText.includes(keyword) || classLabel.includes(keyword) || dataLabel.includes(keyword)
+      );
+      if (matches) {
+        const shimmerChild = node.querySelector(
+          'span.flex.items-center.gap-1.truncate.text-start.align-middle.text-token-text-tertiary',
+        );
+        if (shimmerChild?.textContent?.trim()) {
+          return shimmerChild.textContent.trim();
+        }
+        return text.trim();
+      }
+    }
+    return null;
+  })()`;
 }
