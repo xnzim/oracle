@@ -66,6 +66,7 @@ export async function attachSession(sessionId: string): Promise<void> {
     process.exitCode = 1;
     return;
   }
+  const initialStatus = metadata.status;
   console.log(chalk.bold(`Session: ${sessionId}`));
   const reattachLine = buildReattachLine(metadata);
   if (reattachLine) {
@@ -107,7 +108,7 @@ export async function attachSession(sessionId: string): Promise<void> {
         console.log('\nResult:');
         console.log(`Session failed: ${latest.errorMessage}`);
       }
-      if (latest.usage) {
+      if (latest.usage && initialStatus === 'running') {
         const usage = latest.usage;
         console.log(`\nFinished (tok i/o/r/t: ${usage.inputTokens}/${usage.outputTokens}/${usage.reasoningTokens}/${usage.totalTokens})`);
       }

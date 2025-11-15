@@ -143,10 +143,14 @@ async function expandWithNativeGlob(partitioned: PartitionedFiles, cwd: string):
 
 async function expandWithCustomFs(partitioned: PartitionedFiles, fsModule: MinimalFsModule): Promise<string[]> {
   const paths = new Set<string>();
-  partitioned.literalFiles.forEach((file) => paths.add(file));
+  partitioned.literalFiles.forEach((file) => {
+    paths.add(file);
+  });
   for (const directory of partitioned.literalDirectories) {
     const nested = await expandDirectoryRecursive(directory, fsModule);
-    nested.forEach((entry) => paths.add(entry));
+    nested.forEach((entry) => {
+      paths.add(entry);
+    });
   }
   return Array.from(paths);
 }
