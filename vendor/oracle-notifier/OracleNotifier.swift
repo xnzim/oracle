@@ -29,8 +29,9 @@ center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error 
   content.title = title
   content.body = message
   if !soundName.isEmpty {
-    let custom = UNNotificationSound(named: UNNotificationSoundName(rawValue: soundName))
-    content.sound = custom ?? UNNotificationSound.default
+    content.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: soundName))
+  } else {
+    content.sound = UNNotificationSound.default
   }
   let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
   center.add(request) { addError in

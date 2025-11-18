@@ -16,14 +16,13 @@ mkdir -p "$MACOS" "$RESOURCES"
 
 # Build ICNS from PNG
 mkdir "$ICONSET"
-for sz in 16 32 64 128 256 512 1024; do
+for sz in 16 32 64 128 256 512; do
   sips -z $sz $sz "$ICON_SRC" --out "$ICONSET/icon_${sz}x${sz}.png" >/dev/null
   sips -z $((sz*2)) $((sz*2)) "$ICON_SRC" --out "$ICONSET/icon_${sz}x${sz}@2x.png" >/dev/null
-  break # keep it small; one size is fine for notification icon
 done
-iconutil -c icns "$ICONSET"
-mv "$ICONSET" "$ICNS" || true
+iconutil -c icns --output "$ICNS" "$ICONSET"
 mv "$ICNS" "$RESOURCES/OracleIcon.icns"
+rm -rf "$ICONSET"
 
 # Write Info.plist
 cat > "$CONTENTS/Info.plist" <<'PLIST'
