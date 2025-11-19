@@ -7,12 +7,11 @@ import type {
   SessionStatus,
   SessionModelRun,
 } from '../sessionManager.js';
-import { wait } from '../sessionManager.js';
 import type { OracleResponseMetadata } from '../oracle.js';
 import { renderMarkdownAnsi } from './markdownRenderer.js';
 import { formatElapsed, formatUSD } from '../oracle/format.js';
 import { MODEL_CONFIGS } from '../oracle.js';
-import { sessionStore } from '../sessionStore.js';
+import { sessionStore, wait } from '../sessionStore.js';
 
 const isTty = (): boolean => Boolean(process.stdout.isTTY);
 const dim = (text: string): string => (isTty() ? kleur.dim(text) : text);

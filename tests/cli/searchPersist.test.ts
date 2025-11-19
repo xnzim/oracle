@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { initializeSession } from '../../src/sessionManager.js';
+import { sessionStore } from '../../src/sessionStore.js';
 
 const baseOptions = {
   prompt: 'hi',
@@ -16,7 +16,7 @@ const baseOptions = {
 
 describe('session search persistence', () => {
   it('stores search flag when provided', async () => {
-    const meta = await initializeSession({ ...baseOptions, search: false }, process.cwd());
+    const meta = await sessionStore.createSession({ ...baseOptions, search: false }, process.cwd());
     expect(meta.options.search).toBe(false);
   });
 });
