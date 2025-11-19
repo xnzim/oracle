@@ -88,58 +88,59 @@ export async function launchTui({ version }: LaunchTuiOptions): Promise<void> {
 
     choices.push({ name: 'Exit', value: '__exit__' });
 
-    const prompt = inquirer.prompt<{ selection: string }>([
-      {
-        name: 'selection',
-        type: 'list',
-        message: 'Select a session or action',
-        choices,
-        pageSize: 16,
-        loop: false,
-      },
-    ]);
+    const selection = await new Promise<string>((resolve) => {
+      const prompt = inquirer.prompt<{ selection: string }>([
+        {
+          name: 'selection',
+          type: 'list',
+          message: 'Select a session or action',
+          choices,
+          pageSize: 16,
+          loop: false,
+        },
+      ]);
 
-    let shortcutSelection: string | null = null;
-    const promptUi = prompt as unknown as {
-      ui?: { rl: import('readline').Interface; close: () => void };
-    };
-    const rl = promptUi.ui?.rl;
-    const input = (rl as unknown as { input?: NodeJS.ReadStream })?.input;
-    const onKeypress = (_: unknown, key: { name?: string }): void => {
-      if (!key?.name) return;
-      if (!showingOlder && olderTotal > 0 && key.name === 'pagedown') {
-        shortcutSelection = '__older__';
-        promptUi.ui?.close();
-      }
-      // biome-ignore lint/nursery/noUnnecessaryConditions: runtime key handling needs this guard
-      if (showingOlder) {
-        if (key.name === 'pagedown' && hasOlderNext) {
-          shortcutSelection = '__more__';
-          promptUi.ui?.close();
-        } else if (key.name === 'pageup') {
-          shortcutSelection = hasOlderPrev ? '__prev__' : '__reset__';
-          promptUi.ui?.close();
-        }
-      }
-    };
-    input?.on('keypress', onKeypress);
-
-    let selection: string | undefined;
-    try {
-      ({ selection } = await prompt);
-    } catch (error) {
-      if (shortcutSelection) {
-        selection = shortcutSelection;
-      } else {
+      const promptUi = prompt as unknown as {
+        ui?: { rl: import('readline').Interface; close: () => void };
+      };
+      const rl = promptUi.ui?.rl;
+      const input = (rl as unknown as { input?: NodeJS.ReadStream })?.input;
+      let resolved = false;
+      const finalize = (value: string): void => {
+        // biome-ignore lint/nursery/noUnnecessaryConditions: guard against double-finalize when prompt and shortcut race
+        if (resolved) return;
+        resolved = true;
         input?.off('keypress', onKeypress);
-        console.error(chalk.red('Paging failed; returning to recent list.'), error instanceof Error ? error.message : error);
-        showingOlder = false;
-        olderOffset = 0;
-        continue;
-      }
-    }
-    input?.off('keypress', onKeypress);
-    selection = shortcutSelection ?? selection ?? '__reset__';
+        promptUi.ui?.close();
+        resolve(value);
+      };
+      const onKeypress = (_: unknown, key: { name?: string }): void => {
+        if (!key?.name) return;
+        if (!showingOlder && olderTotal > 0 && key.name === 'pagedown') {
+          finalize('__older__');
+          return;
+        }
+        // biome-ignore lint/nursery/noUnnecessaryConditions: guarding runtime state for key handlers
+        if (showingOlder) {
+          if (key.name === 'pagedown' && hasOlderNext) {
+            finalize('__more__');
+          } else if (key.name === 'pageup') {
+            finalize(hasOlderPrev ? '__prev__' : '__reset__');
+          }
+        }
+      };
+      input?.on('keypress', onKeypress);
+
+      prompt
+        .then(({ selection: answer }) => finalize(answer))
+        .catch((error) => {
+          console.error(
+            chalk.red('Paging failed; returning to recent list.'),
+            error instanceof Error ? error.message : error,
+          );
+          finalize('__reset__');
+        });
+    });
 
     if (selection === '__exit__') {
       console.log(chalk.green('🧿 Closing the book. See you next prompt.'));
