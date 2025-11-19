@@ -7,6 +7,8 @@ All notable changes to this project will be documented in this file.
 ### Added
 - Remote Chrome automation: pass `--remote-chrome <host:port>` (IPv6 supported via `[host]:port`) to reuse an existing browser session on another machine, including remote attachment uploads and improved validation errors.
 - Browser engine can now target Chromium/Edge by pairing `--browser-chrome-path` with the new `--browser-cookie-path` (also configurable via `browser.chromePath` / `browser.chromeCookiePath`). See the new [docs/chromium-forks.md](docs/chromium-forks.md) for OS-specific paths and setup steps.
+- GPT-5.1 Codex (API-only) now works end-to-end with high reasoning; `--model gpt-5.1-codex` forces the API engine automatically so browser runs keep targeting ChatGPT Instant.
+- GPT-5.1 Codex Max isn’t available via API yet. As soon as OpenAI opens the endpoint we’ll add it to `MODEL_CONFIGS`, but for now the CLI rejects that model name.
 
 ### Changed
 - Replaced `chrome-cookies-secure` with an internal cookie reader (sqlite + Keychain/DPAPI) so we can auto-detect Chromium/Edge profiles and avoid optional rebuild loops. Rebuild instructions now target `sqlite3`, `keytar`, and `win-dpapi` directly.
