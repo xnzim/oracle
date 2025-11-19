@@ -12,6 +12,7 @@ const readRequestMock = vi.fn();
 const readLogMock = vi.fn();
 const listSessionsMock = vi.fn().mockResolvedValue([]);
 const getPathsMock = vi.fn();
+const pruneOldSessionsMock = vi.fn();
 
 vi.mock('inquirer', () => ({
   default: { prompt: promptMock },
@@ -35,6 +36,7 @@ vi.mock('../../../src/sessionStore.ts', () => ({
     getPaths: getPathsMock,
     sessionsDir: vi.fn().mockReturnValue('/tmp/.oracle/sessions'),
   },
+  pruneOldSessions: pruneOldSessionsMock,
 }));
 
 // Import after mocks are registered
@@ -56,6 +58,7 @@ describe('askOracleFlow', () => {
   readLogMock.mockReset();
   listSessionsMock.mockReset();
   getPathsMock.mockReset();
+  pruneOldSessionsMock.mockReset();
   listSessionsMock.mockResolvedValue([]);
     createSessionLogWriterMock.mockReturnValue({
       logLine: vi.fn(),

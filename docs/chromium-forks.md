@@ -20,7 +20,7 @@ Either pass the CLI flag or set it once in `~/.oracle/config.json`:
 
 ## 2. Tell cookie sync where your session lives
 
-Set the new `--browser-cookie-path` flag (or `browser.chromeCookiePath` in config) to the absolute path of the fork’s `Cookies` SQLite database. When present, Oracle passes this path directly to `chrome-cookies-secure`, skipping Chrome-only heuristics.
+Set the new `--browser-cookie-path` flag (or `browser.chromeCookiePath` in config) to the absolute path of the fork’s `Cookies` SQLite database. When present, Oracle feeds this path straight into the internal cookie reader, skipping Chrome-only heuristics and profile-name guesses.
 
 ```bash
 oracle --engine browser \
@@ -55,13 +55,7 @@ Brave and other forks work the same way—inspect `%APPDATA%`/`~/Library/Applica
 
 ### macOS / Windows encryption caveat
 
-`chrome-cookies-secure` currently looks up the Keychain/DPAPI secret for “Chrome Safe Storage”. Chromium reuses the same label on Linux, but Edge/Brave use their own (e.g., “Microsoft Edge Safe Storage”). On macOS/Windows, copying cookies from those forks may fail until we patch the dependency to request the alternate label. When that happens:
-
-1. Launch the fork manually once so it registers the ChatGPT cookies.
-2. Export the cookies via DevTools and feed them to Oracle with `--browser-inline-cookies[(-file)]`, **or**
-3. Run ChatGPT in Chrome once so the Chrome cookie store contains a valid session, then reuse it even when launching Chromium/Edge.
-
-We’ll broaden the Keychain support in a follow-up, but the path override already unblocks Linux users and anyone willing to provide inline cookies.
+Oracle now detects the right Keychain/DPAPI label based on the cookie path (`Chrome Safe Storage`, `Chromium Safe Storage`, `Microsoft Edge Safe Storage`, etc.) and pulls the key automatically. If macOS asks for Keychain access, approve it. When the system doesn’t expose that secret (e.g., the browser hasn’t stored any cookies yet), fall back to `--browser-inline-cookies[(-file)]` until you can sign in once via the target browser.
 
 ## Troubleshooting checklist
 

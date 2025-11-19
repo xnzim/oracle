@@ -9,7 +9,7 @@ and run the live API suite before shipping major transport changes.
 
 - macOS with Chrome installed (default profile signed in to ChatGPT Pro).
 - `pnpm install` already completed, and native deps rebuilt as needed via  
-  `PYTHON=/usr/bin/python3 npm_config_build_from_source=1 pnpm rebuild chrome-cookies-secure sqlite3 keytar --workspace-root`.
+  `PYTHON=/usr/bin/python3 npm_config_build_from_source=1 pnpm rebuild sqlite3 keytar win-dpapi --workspace-root`.
 - Headful display access (no `--browser-headless`).
 - When debugging, add `--browser-keep-browser` so Chrome stays open after Oracle exits, then connect with `pnpm exec tsx scripts/browser-tools.ts ...` (screenshot, eval, DOM picker, etc.).
 - Ensure no Chrome instances are force-terminated mid-run; let Oracle clean up once you’re done capturing state.
@@ -61,7 +61,7 @@ This mirrors Mario Zechner’s “What if you don’t need MCP?” technique and
      ```bash
      pnpm run oracle -- --engine browser --model "5.1 Instant" --prompt "Smoke test cookie sync."
      ```
-   - Expect an early failure: `Unable to load chrome-cookies-secure. Cookie copy is required.` plus the sqlite rebuild hint.  
+   - Expect an early failure: `Unable to derive Chrome cookie key` (or a sqlite binding hint) because the cookie reader can’t load sqlite.  
    - Restore `sqlite3` and rebuild; rerun to confirm cookies copy successfully (`Copied N cookies from Chrome profile Default`).
 
 2. **Prompt Submission & Model Switching**

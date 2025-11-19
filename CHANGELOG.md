@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file.
 - Browser engine can now target Chromium/Edge by pairing `--browser-chrome-path` with the new `--browser-cookie-path` (also configurable via `browser.chromePath` / `browser.chromeCookiePath`). See the new [docs/chromium-forks.md](docs/chromium-forks.md) for OS-specific paths and setup steps.
 
 ### Changed
+- Replaced `chrome-cookies-secure` with an internal cookie reader (sqlite + Keychain/DPAPI) so we can auto-detect Chromium/Edge profiles and avoid optional rebuild loops. Rebuild instructions now target `sqlite3`, `keytar`, and `win-dpapi` directly.
 - Reject prompts shorter than 20 characters with a friendly hint (prevents accidental single-character runs). Override via ORACLE_MIN_PROMPT_CHARS for automated environments.
 - Browser engine default timeout bumped from 15m (900s) to 20m (1200s) so long GPT-5 Pro responses don’t get cut off; CLI docs/help text now reflect the new ceiling.
 - Duration flags such as `--browser-timeout`/`--browser-input-timeout` now accept chained units (`1h2m10s`, `3m10s`, etc.) plus `h`, `m`, `s`, or `ms` suffixes, matching the formats we already log.
