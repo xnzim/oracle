@@ -9,7 +9,7 @@ import {
   asOracleUserError,
   extractTextOutput,
   } from '../oracle.js';
-import { runBrowserSessionExecution } from '../browser/sessionRunner.js';
+import { runBrowserSessionExecution, type BrowserSessionRunnerDeps } from '../browser/sessionRunner.js';
 import { formatResponseMetadata, formatTransportMetadata } from './sessionDisplay.js';
 import { markErrorLogged } from './errorUtils.js';
 import {
@@ -33,6 +33,7 @@ export interface SessionRunParams {
   write: (chunk: string) => boolean;
   version: string;
   notifications?: NotificationSettings;
+  browserDeps?: BrowserSessionRunnerDeps;
 }
 
 export async function performSessionRun({
@@ -45,6 +46,7 @@ export async function performSessionRun({
   write,
   version,
   notifications,
+  browserDeps,
 }: SessionRunParams): Promise<void> {
   await sessionStore.updateSession(sessionMeta.id, {
     status: 'running',
@@ -58,7 +60,7 @@ export async function performSessionRun({
       if (runOptions.model.startsWith('gemini')) {
         throw new Error('Gemini models are not available in browser mode. Re-run with --engine api.');
       }
-      if (process.platform !== 'darwin') {
+      if (!browserDeps?.executeBrowser && process.platform !== 'darwin') {
         throw new Error(
           'Browser engine is only supported on macOS today. Use --engine api instead, or run on macOS.',
         );
@@ -68,7 +70,7 @@ export async function performSessionRun({
       }
       const result = await runBrowserSessionExecution(
         { runOptions, browserConfig, cwd, log, cliVersion: version },
-        {},
+        browserDeps,
       );
       await sessionStore.updateSession(sessionMeta.id, {
         status: 'completed',

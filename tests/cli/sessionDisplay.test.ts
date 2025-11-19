@@ -39,7 +39,7 @@ vi.mock('../../src/cli/markdownRenderer.ts', () => {
   };
 });
 
-const sessionManagerMock = await import('../../src/sessionManager.ts');
+const _sessionManagerMock = await import('../../src/sessionManager.ts');
 const markdownMock = await import('../../src/cli/markdownRenderer.ts');
 const renderMarkdownMock = markdownMock.renderMarkdownAnsi as unknown as { mockClear?: () => void };
 const readSessionMetadataMock = sessionStoreMock.readSession as unknown as ReturnType<typeof vi.fn>;
@@ -212,8 +212,6 @@ describe('attachSession rendering', () => {
     readSessionRequestMock.mockResolvedValue({ prompt: 'Prompt here' });
     const huge = 'A'.repeat(210_000);
     readSessionLogMock.mockResolvedValueOnce(huge).mockResolvedValueOnce(huge);
-    const writeSpy = vi.spyOn(process.stdout, 'write');
-    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     waitMock.mockResolvedValue(undefined);
 
     await attachSession('sess', { renderMarkdown: true });

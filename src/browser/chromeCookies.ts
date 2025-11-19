@@ -456,6 +456,7 @@ function isSqliteBindingError(error: unknown): boolean {
 }
 
 async function attemptSqliteRebuild(): Promise<boolean> {
+  // biome-ignore lint/nursery/noUnnecessaryConditions: guard ensures rebuild runs at most once per process
   if (attemptedSqliteRebuild) {
     return false;
   }
@@ -496,6 +497,7 @@ async function attemptSqliteRebuild(): Promise<boolean> {
   });
 }
 
+// biome-ignore lint/style/useNamingConvention: legacy test helper naming for vitest mocks
 export const __test__ = {
   buildHostFilters,
   domainMatches,

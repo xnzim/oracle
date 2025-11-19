@@ -59,9 +59,13 @@ describe('oracle CLI integration', () => {
     const oracleHome = await mkdtemp(path.join(os.tmpdir(), 'oracle-codex-'));
     const env = {
       ...process.env,
+      // biome-ignore lint/style/useNamingConvention: environment variable name
       OPENAI_API_KEY: 'sk-integration',
+      // biome-ignore lint/style/useNamingConvention: environment variable name
       ORACLE_HOME_DIR: oracleHome,
+      // biome-ignore lint/style/useNamingConvention: environment variable name
       ORACLE_CLIENT_FACTORY: CLIENT_FACTORY,
+      // biome-ignore lint/style/useNamingConvention: environment variable name
       ORACLE_NO_DETACH: '1',
     };
 
@@ -87,8 +91,11 @@ describe('oracle CLI integration', () => {
     const oracleHome = await mkdtemp(path.join(os.tmpdir(), 'oracle-codex-max-'));
     const env = {
       ...process.env,
+      // biome-ignore lint/style/useNamingConvention: environment variable name
       OPENAI_API_KEY: 'sk-integration',
+      // biome-ignore lint/style/useNamingConvention: environment variable name
       ORACLE_HOME_DIR: oracleHome,
+      // biome-ignore lint/style/useNamingConvention: environment variable name
       ORACLE_CLIENT_FACTORY: CLIENT_FACTORY,
     };
 

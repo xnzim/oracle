@@ -28,7 +28,7 @@ interface RunBrowserSessionArgs {
   cliVersion: string;
 }
 
-interface BrowserSessionRunnerDeps {
+export interface BrowserSessionRunnerDeps {
   assemblePrompt?: typeof assembleBrowserPrompt;
   executeBrowser?: typeof runBrowserMode;
 }

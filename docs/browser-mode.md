@@ -27,7 +27,7 @@
 - `--browser-inline-files`: paste resolved files directly into the composer instead of uploading them (debug fallback; useful when the attachment button is broken).
 - `--browser-bundle-files`: bundle all resolved attachments into a single temp file before uploading (useful when you want one upload even with many files).
 - sqlite bindings: automatic rebuilds now require `ORACLE_ALLOW_SQLITE_REBUILD=1`. Without it, the CLI logs instructions instead of running `pnpm rebuild` on your behalf.
-- `--model`: the same flag used for API runs controls the ChatGPT picker. Pass descriptive labels such as `--model "ChatGPT 5.1 Instant"` when you want a specific browser variant; canonical API names (`gpt-5-pro`, `gpt-5.1`) still work and map to their default picker labels.
+- `--model`: the same flag used for API runs controls the ChatGPT picker. Pass descriptive labels such as `--model "ChatGPT 5.1 Instant"` when you want a specific browser variant; canonical API names (`gpt-5.1-pro`, `gpt-5.1`) still work and map to their default picker labels (legacy `gpt-5-pro` remains supported).
 - Cookie sync is mandatory—if we can’t copy cookies from Chrome, the run exits early. Use the hidden `--browser-allow-cookie-errors` flag only when you’re intentionally running logged out (it skips the early exit but still warns).
 - Experimental cookie controls (hidden flags/env):
   - `--browser-cookie-names <comma-list>` or `ORACLE_BROWSER_COOKIE_NAMES`: allowlist which cookies to sync. Useful for “only NextAuth/Cloudflare, drop the rest.”
@@ -94,6 +94,44 @@ Key behavior:
 - If you target IPv6 without brackets (e.g., `2001:db8::1:9222`), the CLI rejects it—wrap the address like `[2001:db8::1]:9222`.
 - Ensure firewalls allow inbound TCP to the debugging port and that you’re not behind a captive proxy stripping WebSocket upgrades.
 - Because we do not control the remote lifecycle, Chrome stays running after the session. Shut it down manually when you’re done or remove `--remote-debugging-port` to stop exposing CDP.
+
+### Remote Service Mode (`oracle serve`)
+
+Prefer to keep Chrome entirely on the remote Mac (no DevTools tunneling, no manual cookie shuffling)? Use the built-in service:
+
+1. **Start the host**
+   ```bash
+   oracle serve
+   ```
+   Oracle picks a free port, launches Chrome, starts an HTTP/SSE API, and prints:
+   ```
+   Remote Oracle listening at 0.0.0.0:9473
+   Access token: c4e5f9...
+   ```
+   Use `--host`, `--port`, or `--token` to override the defaults if needed.
+
+2. **Run from your laptop**
+   ```bash
+   oracle --engine browser \
+     --remote-host 192.168.64.2:9473 \
+     --remote-token c4e5f9... \
+     --remote-cookie-source local \
+     --prompt "Summarize the incident doc" \
+     --file docs/incidents/latest.md
+   ```
+   - `--remote-host` points the CLI at the VM.
+   - `--remote-token` matches the token printed by `oracle serve` (set `ORACLE_REMOTE_TOKEN` to avoid repeating it).
+   - `--remote-cookie-source local` (optional) exports your local Chrome cookies and ships them to the remote host so the remote Chrome session stays signed in. Use `none` when the VM already has an active ChatGPT session.
+
+3. **What happens**
+   - The CLI assembles the composed prompt + file bundle locally, sends them (plus cookies if requested) to the VM, and streams log lines/answer text back through the same HTTP connection.
+   - The remote host runs Chrome locally, so uploads, model switching, and markdown capture all happen on the VM. Your machine simply prints the logs.
+   - Background/detached sessions (`--no-wait`) are disabled in remote mode so the CLI can keep streaming output.
+
+4. **Stop the host**
+   - `Ctrl+C` on the VM shuts down the HTTP server and Chrome. Restart `oracle serve` whenever you need a new session; omit `--token` to let it rotate automatically.
+
+This mode is ideal when you have a macOS VM (or spare Mac mini) logged into ChatGPT and you just want to run the CLI from another machine without ever copying profiles or keeping Chrome visible locally.
 
 ## Limitations / Follow-Up Plan
 

@@ -10,9 +10,11 @@ import { shouldRequirePrompt } from '../src/cli/promptRequirement.js';
 import chalk from 'chalk';
 import type { SessionMetadata, SessionMode, BrowserSessionConfig } from '../src/sessionStore.js';
 import { sessionStore, pruneOldSessions } from '../src/sessionStore.js';
-import { runOracle, renderPromptMarkdown, readFiles } from '../src/oracle.js';
+import { DEFAULT_MODEL, runOracle, renderPromptMarkdown, readFiles } from '../src/oracle.js';
 import type { ModelName, PreviewMode, RunOracleOptions } from '../src/oracle.js';
 import { CHATGPT_URL } from '../src/browserMode.js';
+import { loadChromeCookies } from '../src/browser/chromeCookies.js';
+import { createRemoteBrowserExecutor } from '../src/remote/client.js';
 import { applyHelpStyling } from '../src/cli/help.js';
 import {
   collectPaths,
@@ -33,6 +35,7 @@ import { shouldDetachSession } from '../src/cli/detach.js';
 import { applyHiddenAliases } from '../src/cli/hiddenAliases.js';
 import { buildBrowserConfig, resolveBrowserModelLabel } from '../src/cli/browserConfig.js';
 import { performSessionRun } from '../src/cli/sessionRunner.js';
+import type { BrowserSessionRunnerDeps } from '../src/browser/sessionRunner.js';
 import { attachSession, showStatus, formatCompletionSummary } from '../src/cli/sessionDisplay.js';
 import type { ShowStatusOptions } from '../src/cli/sessionDisplay.js';
 import { resolveGeminiModelId } from '../src/oracle/gemini.js';
@@ -92,6 +95,9 @@ interface CliOptions extends OptionValues {
   browserInlineFiles?: boolean;
   browserBundleFiles?: boolean;
   remoteChrome?: string;
+  remoteHost?: string;
+  remoteToken?: string;
+  remoteCookieSource?: 'local' | 'none';
   verbose?: boolean;
   debugHelp?: boolean;
   heartbeat?: number;
@@ -108,6 +114,36 @@ interface CliOptions extends OptionValues {
 }
 
 type ResolvedCliOptions = Omit<CliOptions, 'model'> & { model: ModelName; models?: ModelName[] };
+
+function normalizeRemoteCookieSource(input?: string | null): 'local' | 'none' | undefined {
+  if (!input) {
+    return undefined;
+  }
+  const normalized = input.toLowerCase();
+  if (normalized === 'local' || normalized === 'none') {
+    return normalized;
+  }
+  throw new Error('Invalid remote cookie source. Expected "local" or "none".');
+}
+
+async function populateRemoteCookiesFromLocal(config: BrowserSessionConfig): Promise<void> {
+  const filterNames =
+    Array.isArray(config.cookieNames) && config.cookieNames.length > 0
+      ? new Set(config.cookieNames)
+      : undefined;
+  const cookies = await loadChromeCookies({
+    targetUrl: config.url ?? CHATGPT_URL,
+    profile: config.chromeProfile ?? undefined,
+    explicitCookiePath: config.chromeCookiePath ?? undefined,
+    filterNames,
+  });
+  if (!cookies.length) {
+    throw new Error('Unable to locate ChatGPT cookies in the local Chrome profile.');
+  }
+  config.inlineCookies = cookies;
+  config.inlineCookiesSource = 'remote-local';
+  config.cookieSync = false;
+}
 
 const VERSION = getCliVersion();
 const CLI_ENTRYPOINT = fileURLToPath(import.meta.url);
@@ -145,7 +181,7 @@ program.hook('preAction', (thisCommand) => {
 });
 program
   .name('oracle')
-  .description('One-shot GPT-5 Pro / GPT-5.1 / GPT-5.1 Codex tool for hard questions that benefit from large file context and server-side search.')
+  .description('One-shot GPT-5.1 Pro / GPT-5.1 / GPT-5.1 Codex tool for hard questions that benefit from large file context and server-side search.')
   .version(VERSION)
   .argument('[prompt]', 'Prompt text (shorthand for --prompt).')
   .option('-p, --prompt <text>', 'User prompt to send to the model.')
@@ -165,14 +201,14 @@ program
   .option('-s, --slug <words>', 'Custom session slug (3-5 words).')
   .option(
     '-m, --model <model>',
-    'Model to target (gpt-5-pro | gpt-5.1 | gpt-5.1-codex, or ChatGPT labels like "5.1 Instant" for browser runs).',
+    'Model to target (gpt-5.1-pro | gpt-5.1 | gpt-5.1-codex, or ChatGPT labels like "5.1 Instant" for browser runs).',
     normalizeModelOption,
-    'gpt-5-pro',
+    DEFAULT_MODEL,
   )
   .addOption(
     new Option(
       '--models <models>',
-      'Comma-separated API model list to query in parallel (e.g., "gpt-5-pro,gemini-3-pro").',
+      'Comma-separated API model list to query in parallel (e.g., "gpt-5.1-pro,gemini-3-pro").',
     )
       .argParser(collectModelList)
       .default([]),
@@ -195,7 +231,7 @@ program
   .addOption(
     new Option(
       '--timeout <seconds|auto>',
-      'Overall timeout before aborting the API call (auto = 60m for gpt-5-pro, 30s otherwise).',
+      'Overall timeout before aborting the API call (auto = 60m for gpt-5.1-pro, 30s otherwise).',
     )
       .argParser(parseTimeoutOption)
       .default('auto'),
@@ -273,6 +309,13 @@ program
       'Connect to remote Chrome DevTools Protocol (e.g., 192.168.1.10:9222 or [2001:db8::1]:9222 for IPv6).',
     ),
   )
+  .addOption(new Option('--remote-host <host:port>', 'Delegate browser runs to a remote `oracle serve` instance.').hideHelp())
+  .addOption(new Option('--remote-token <token>', 'Access token for the remote `oracle serve` instance.').hideHelp())
+  .addOption(
+    new Option('--remote-cookie-source <mode>', 'Cookie source for remote runs (local | none).')
+      .choices(['local', 'none'])
+      .hideHelp(),
+  )
   .addOption(
     new Option('--browser-inline-files', 'Paste files directly into the ChatGPT composer instead of uploading attachments.').default(false),
   )
@@ -300,6 +343,21 @@ Examples:
     --file "src/**/*.ts" --file "!src/**/*.test.ts"
 `,
 );
+
+program
+  .command('serve')
+  .description('Run Oracle browser automation as a remote service for other machines.')
+  .option('--host <address>', 'Interface to bind (default 0.0.0.0).')
+  .option('--port <number>', 'Port to listen on (default random).', parseIntOption)
+  .option('--token <value>', 'Access token clients must provide (random if omitted).')
+  .action(async (commandOptions) => {
+    const { serveRemote } = await import('../src/remote/server.js');
+    await serveRemote({
+      host: commandOptions.host,
+      port: commandOptions.port,
+      token: commandOptions.token,
+    });
+  });
 
 const sessionCommand = program
   .command('session [id]')
@@ -432,7 +490,7 @@ function buildRunOptionsFromMetadata(metadata: SessionMetadata): RunOracleOption
   const stored = metadata.options ?? {};
   return {
     prompt: stored.prompt ?? '',
-    model: (stored.model as ModelName) ?? 'gpt-5-pro',
+    model: (stored.model as ModelName) ?? DEFAULT_MODEL,
     models: stored.models as ModelName[] | undefined,
     effectiveModelId: stored.effectiveModelId ?? stored.model,
     file: stored.file ?? [],
@@ -510,6 +568,11 @@ async function runRootCommand(options: CliOptions): Promise<void> {
   };
   applyRetentionOption();
 
+  const remoteHost = options.remoteHost ?? process.env.ORACLE_REMOTE_HOST;
+  const remoteToken = options.remoteToken ?? process.env.ORACLE_REMOTE_TOKEN;
+  const remoteCookieSource =
+    normalizeRemoteCookieSource(options.remoteCookieSource ?? process.env.ORACLE_REMOTE_COOKIE_SOURCE) ?? 'none';
+
   if (userCliArgs.length === 0) {
     if (tuiEnabled()) {
       await launchTui({ version: VERSION });
@@ -552,6 +615,13 @@ async function runRootCommand(options: CliOptions): Promise<void> {
     options.baseUrl = userConfig.apiBaseUrl;
   }
 
+  if (remoteHost && engine !== 'browser') {
+    throw new Error('--remote-host requires --engine browser.');
+  }
+  if (remoteHost && options.remoteChrome) {
+    throw new Error('--remote-host cannot be combined with --remote-chrome.');
+  }
+
   if (optionUsesDefault('azureEndpoint')) {
     if (process.env.AZURE_OPENAI_ENDPOINT) {
       options.azureEndpoint = process.env.AZURE_OPENAI_ENDPOINT;
@@ -574,7 +644,7 @@ async function runRootCommand(options: CliOptions): Promise<void> {
     }
   }
 
-  const cliModelArg = normalizeModelOption(options.model) || 'gpt-5-pro';
+  const cliModelArg = normalizeModelOption(options.model) || DEFAULT_MODEL;
   const resolvedModelCandidate: ModelName =
     engine === 'browser' ? inferModelFromLabel(cliModelArg) : resolveApiModel(cliModelArg);
   const normalizedMultiModels: ModelName[] = multiModelProvided
@@ -597,6 +667,9 @@ async function runRootCommand(options: CliOptions): Promise<void> {
   if (normalizedMultiModels.length > 0) {
     engine = 'api';
   }
+  if (remoteHost && normalizedMultiModels.length > 0) {
+    throw new Error('--remote-host does not support --models yet. Use API engine locally instead.');
+  }
   const resolvedModel: ModelName =
     normalizedMultiModels[0] ?? (isGemini ? resolveApiModel(cliModelArg) : resolvedModelCandidate);
   const effectiveModelId = resolvedModel.startsWith('gemini') ? resolveGeminiModelId(resolvedModel) : resolvedModel;
@@ -610,13 +683,17 @@ async function runRootCommand(options: CliOptions): Promise<void> {
 
   // Decide whether to block until completion:
   // - explicit --wait / --no-wait wins
-  // - otherwise block for fast models (gpt-5.1, browser) and detach by default for gpt-5-pro API
-  const waitPreference = resolveWaitFlag({
+  // - otherwise block for fast models (gpt-5.1, browser) and detach by default for pro API runs
+  let waitPreference = resolveWaitFlag({
     waitFlag: options.wait,
     noWaitFlag: options.noWait,
     model: resolvedModel,
     engine,
   });
+  if (remoteHost && !waitPreference) {
+    console.log(chalk.dim('Remote browser runs require --wait; ignoring --no-wait.'));
+    waitPreference = true;
+  }
 
   if (await handleStatusFlag(options, { attachSession, showStatus })) {
     return;
@@ -726,6 +803,17 @@ async function runRootCommand(options: CliOptions): Promise<void> {
         })
       : undefined;
 
+  let browserDeps: BrowserSessionRunnerDeps | undefined;
+  if (browserConfig && remoteHost) {
+    if (remoteCookieSource === 'local') {
+      await populateRemoteCookiesFromLocal(browserConfig);
+    }
+    browserDeps = {
+      executeBrowser: createRemoteBrowserExecutor({ host: remoteHost, token: remoteToken }),
+    };
+  }
+  const remoteExecutionActive = Boolean(browserDeps);
+
   if (options.dryRun) {
     const baseRunOptions = buildRunOptions(resolvedOptions, {
       preview: false,
@@ -773,12 +861,14 @@ async function runRootCommand(options: CliOptions): Promise<void> {
     effectiveModelId,
   };
   const disableDetachEnv = process.env.ORACLE_NO_DETACH === '1';
-  const detachAllowed = shouldDetachSession({
-    engine,
-    model: resolvedModel,
-    waitPreference,
-    disableDetachEnv,
-  });
+  const detachAllowed = remoteExecutionActive
+    ? false
+    : shouldDetachSession({
+        engine,
+        model: resolvedModel,
+        waitPreference,
+        disableDetachEnv,
+      });
   const detached = !detachAllowed
     ? false
     : await launchDetachedSession(sessionMeta.id).catch((error) => {
@@ -808,6 +898,7 @@ async function runRootCommand(options: CliOptions): Promise<void> {
       notifications,
       userConfig,
       true,
+      browserDeps,
     );
     return;
   }
@@ -826,6 +917,7 @@ async function runInteractiveSession(
   notifications?: NotificationSettings,
   userConfig?: UserConfig,
   suppressSummary = false,
+  browserDeps?: BrowserSessionRunnerDeps,
 ): Promise<void> {
   const { logLine, writeChunk, stream } = sessionStore.createLogWriter(sessionMeta.id);
   let headerAugmented = false;
@@ -859,6 +951,7 @@ async function runInteractiveSession(
       version: VERSION,
       notifications:
         notifications ?? deriveNotificationSettingsFromMetadata(sessionMeta, process.env, userConfig?.notify),
+      browserDeps,
     });
     const latest = await sessionStore.readSession(sessionMeta.id);
     if (!suppressSummary) {
