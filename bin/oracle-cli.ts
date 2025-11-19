@@ -2,6 +2,7 @@
 import 'dotenv/config';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { once } from 'node:events';
 import { Command, Option } from 'commander';
 import type { OptionValues } from 'commander';
 import { resolveEngine, type EngineMode, defaultWaitPreference } from '../src/cli/engine.js';
@@ -84,6 +85,8 @@ interface CliOptions extends OptionValues {
   browserTimeout?: string;
   browserInputTimeout?: string;
   browserNoCookieSync?: boolean;
+  browserCookieNames?: string;
+  browserInlineCookies?: string;
   browserHeadless?: boolean;
   browserHideWindow?: boolean;
   browserKeepBrowser?: boolean;
@@ -238,6 +241,10 @@ program
   .addOption(new Option('--browser-timeout <ms|s|m>', 'Maximum time to wait for an answer (default 900s).').hideHelp())
   .addOption(
     new Option('--browser-input-timeout <ms|s|m>', 'Maximum time to wait for the prompt textarea (default 30s).').hideHelp(),
+  )
+  .addOption(new Option('--browser-cookie-names <names>', 'Comma-separated cookie allowlist for sync.').hideHelp())
+  .addOption(
+    new Option('--browser-inline-cookies <jsonOrBase64>', 'Inline cookies payload (JSON array or base64-encoded JSON).').hideHelp(),
   )
   .addOption(new Option('--browser-no-cookie-sync', 'Skip copying cookies from Chrome.').hideHelp())
   .addOption(new Option('--browser-headless', 'Launch Chrome in headless mode.').hideHelp())
@@ -928,7 +935,17 @@ program.action(async function (this: Command) {
   await runRootCommand(options);
 });
 
-await program.parseAsync(process.argv).catch((error: unknown) => {
+async function main(): Promise<void> {
+  const parsePromise = program.parseAsync(process.argv);
+  const sigintPromise = once(process, 'SIGINT').then(() => 'sigint' as const);
+  const result = await Promise.race([parsePromise.then(() => 'parsed' as const), sigintPromise]);
+  if (result === 'sigint') {
+    console.log(chalk.yellow('\nCancelled.'));
+    process.exitCode = 130;
+  }
+}
+
+await main().catch((error: unknown) => {
   if (error instanceof Error) {
     if (!isErrorLogged(error)) {
       console.error(chalk.red('✖'), error.message);

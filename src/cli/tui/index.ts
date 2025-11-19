@@ -105,7 +105,7 @@ export async function launchTui({ version }: LaunchTuiOptions): Promise<void> {
       if (!showingOlder && olderTotal > 0 && key.name === 'pagedown') {
         shortcutSelection = '__older__';
         promptWithUi.ui?.close();
-      } else if (showingOlder) {
+      } else {
         if (key.name === 'pagedown' && hasOlderNext) {
           shortcutSelection = '__more__';
           promptWithUi.ui?.close();
