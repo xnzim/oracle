@@ -61,6 +61,7 @@ All notable changes to this project will be documented in this file.
 - Session summaries and cost displays are clearer, with zombie-session detection to avoid stale runs.
 - Token estimation now uses the full request body (instructions + input text + tools/reasoning/background/store) and compares estimated vs actual tokens in the finished stats to reduce 400/413 surprises.
 - Help tips now explicitly warn that Oracle cannot see your project unless you pass `--file …` to attach the necessary source.
+- Help tips/examples now call out project/platform/version requirements and show how to label cross-repo attachments so the model has the right context.
 
 #### MCP configuration (quick reference)
 - Local stdio (mcporter): add to `config/mcporter.json`

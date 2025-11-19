@@ -69,6 +69,8 @@ function renderHelpFooter(program: Command, colors: HelpColors): string {
     `${colors.bullet('•')} Oracle cannot see your project unless you pass ${colors.accent('--file …')} — attach the files/dirs you want it to read.`,
     `${colors.bullet('•')} Attach lots of source (whole directories beat single files) and keep total input under ~196k tokens.`,
     `${colors.bullet('•')} Oracle starts empty—open with a short project briefing (stack, services, build steps), spell out the question and prior attempts, and why it matters; the more explanation and context you provide, the better the response will be.`,
+    `${colors.bullet('•')} Spell out the project + platform + version requirements (repo name, target OS/toolchain versions, API dependencies) so Oracle doesn’t guess defaults.`,
+    `${colors.bullet('•')} When comparing multiple repos/files, spell out each repo + path + role (e.g., “Project A SettingsView → apps/project-a/Sources/SettingsView.swift; Project B SettingsView → ../project-b/mac/...”) so the model knows exactly which file is which.`,
     `${colors.bullet('•')} Best results: 6–30 sentences plus key source files; very short prompts often yield generic answers.`,
     `${colors.bullet('•')} Oracle is one-shot: it does not remember prior runs, so start fresh each time with full context.`,
     `${colors.bullet('•')} Run ${colors.accent('--files-report')} to inspect token spend before hitting the API.`,
@@ -101,6 +103,10 @@ function renderHelpFooter(program: Command, colors: HelpColors): string {
     formatExample(
       `${program.name()} --prompt "Ship review" --slug "release-readiness-audit"`,
       'Encourage the model to hand you a 3–5 word slug and pass it along with --slug.',
+    ),
+    formatExample(
+      `${program.name()} --prompt "Tabs frozen: compare Project A SettingsView (apps/project-a/Sources/SettingsView.swift) vs Project B SettingsView (../project-b/mac/App/Presentation/Views/SettingsView.swift)" --file apps/project-a/Sources/SettingsView.swift --file ../project-b/mac/App/Presentation/Views/SettingsView.swift`,
+      'Spell out what each attached file is (repo + path + role) before asking for comparisons so the model knows exactly what it is reading.',
     ),
   ].join('\n\n');
 
