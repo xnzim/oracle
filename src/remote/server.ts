@@ -241,25 +241,25 @@ function formatSocket(req: http.IncomingMessage): string {
 
 async function loadLocalChatgptCookies(logger: (message: string) => void, targetUrl: string): Promise<CookieParam[] | null> {
   try {
-    logger('Loading ChatGPT cookies from host Chrome profile...');
+    logger('Loading ChatGPT cookies from this host\'s Chrome profile...');
     const cookies = await Promise.resolve(
       loadChromeCookies({
         targetUrl,
         profile: 'Default',
       }),
     ).catch((error) => {
-      logger(`Unable to load local ChatGPT cookies on remote host: ${error instanceof Error ? error.message : String(error)}`);
+      logger(`Unable to load local ChatGPT cookies on this host: ${error instanceof Error ? error.message : String(error)}`);
       return [];
     });
     if (!cookies || cookies.length === 0) {
-      logger('No local ChatGPT cookies found on remote host. Please log in once; opening ChatGPT...');
+      logger('No local ChatGPT cookies found on this host. Please log in once; opening ChatGPT...');
       triggerLocalLoginPrompt(logger, targetUrl);
       return null;
     }
-    logger(`Loaded ${cookies.length} local ChatGPT cookies on remote host.`);
+    logger(`Loaded ${cookies.length} local ChatGPT cookies on this host.`);
     return cookies;
   } catch (error) {
-    logger(`Unable to load local ChatGPT cookies on remote host: ${error instanceof Error ? error.message : String(error)}`);
+    logger(`Unable to load local ChatGPT cookies on this host: ${error instanceof Error ? error.message : String(error)}`);
     return null;
   }
 }
@@ -278,6 +278,6 @@ function triggerLocalLoginPrompt(logger: (message: string) => void, url: string)
     });
     logger(`Opened ${url} locally. Please sign in; subsequent runs will reuse the session.`);
   } catch {
-    logger(`Please open ${url} in the remote host's browser and sign in; then rerun.`);
+    logger(`Please open ${url} in this host's browser and sign in; then rerun.`);
   }
 }
