@@ -42,6 +42,7 @@ import { attachSession, showStatus, formatCompletionSummary } from '../src/cli/s
 import type { ShowStatusOptions } from '../src/cli/sessionDisplay.js';
 import { formatCompactNumber } from '../src/cli/format.js';
 import { formatIntroLine } from '../src/cli/tagline.js';
+import { warnIfOversizeBundle } from '../src/cli/bundleWarnings.js';
 import { resolveGeminiModelId } from '../src/oracle/gemini.js';
 import { handleSessionCommand, type StatusOptions, formatSessionCleanupMessage } from '../src/cli/sessionCommand.js';
 import { isErrorLogged } from '../src/cli/errorUtils.js';
@@ -771,6 +772,8 @@ async function runRootCommand(options: CliOptions): Promise<void> {
       storeResponse: false,
     });
     const estimatedTokens = estimateRequestTokens(requestBody, modelConfig);
+    const warnThreshold = Math.min(196_000, modelConfig.inputLimit ?? 196_000);
+    warnIfOversizeBundle(estimatedTokens, warnThreshold, console.log);
     if (options.renderMarkdown) {
       console.log(bundle.markdown);
     }
