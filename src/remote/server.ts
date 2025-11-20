@@ -197,6 +197,13 @@ export async function createRemoteServer(
 
 export async function serveRemote(options: RemoteServerOptions = {}): Promise<void> {
   const server = await createRemoteServer(options);
+  // Warm-up: check if we already have local ChatGPT cookies; if not, open login prompt and leave it open.
+  const cookies = await loadLocalChatgptCookies(console.log, CHATGPT_URL);
+  if (cookies?.length) {
+    console.log(`🧿 Detected ${cookies.length} ChatGPT cookies on this host; runs should stay signed in.`);
+  } else {
+    console.log('🧿 No ChatGPT cookies detected; opened chatgpt.com for login. Sign in once, leave the window open, then rerun.');
+  }
   await new Promise<void>((resolve) => {
     const shutdown = () => {
       console.log('Shutting down remote service...');
