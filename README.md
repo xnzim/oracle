@@ -20,13 +20,13 @@ Think “one-shot context drop.” You point Oracle at the files that matter; it
 
 ```bash
 # API engine (recommended)
-OPENAI_API_KEY=sk-... npx -y @steipete/oracle -p "Review the TS data layer" --file "src/**/*.ts,!src/**/*.test.ts"
+npx -y @steipete/oracle -p "Review the TS data layer" --file "src/**/*.ts,!src/**/*.test.ts"
 
 # Browser engine (no API key)
 npx -y @steipete/oracle --engine browser -p "Review the TS data layer" --file "src/**/*.ts,!src/**/*.test.ts"
 
 # Multi-model in one call (API): GPT-5.1 Pro + Gemini 3 Pro + Claude Sonnet
-OPENAI_API_KEY=sk-... npx -y @steipete/oracle --models "gpt-5.1-pro,gemini-3-pro,claude-4.5-sonnet" -p "Cross-check this design" --file src/
+npx -y @steipete/oracle --models "gpt-5.1-pro,gemini-3-pro,claude-4.5-sonnet" -p "Cross-check this design" --file src/
 
 # Sessions (list + reattach)
 npx -y @steipete/oracle status
@@ -34,6 +34,7 @@ npx -y @steipete/oracle session <id>
 ```
 
 **Recommendation:** Prefer API (default) or manual bundle/copy flows. Full browser automation is experimental (macOS + Chrome only today) and may be blocked by login/Cloudflare challenges.
+Keys are loaded automatically from provider env vars (OpenAI, Gemini, Claude, Azure/LiteLLM); pass them inline only if you must.
 
 ## Manual handoff (no automation)
 - Copy + preview: `npx -y @steipete/oracle --copy --render -p "Your prompt" --file "src/**/*.ts,!src/**/*.test.ts"`
@@ -51,8 +52,8 @@ npx -y @steipete/oracle session <id>
 - Preview/copy — `--render`, `--render-plain`, `--copy` for manual workflows.
 
 ## CLI usage (short form)
-- CI one-liner: `OPENAI_API_KEY=sk-... npx -y @steipete/oracle -p "Smoke-check latest PR" --file src/,docs/ --preview summary`
-- Background Pro run: `OPENAI_API_KEY=sk-... npx -y @steipete/oracle -p "Deep review" --file src/ --wait`
+- CI one-liner: `npx -y @steipete/oracle -p "Smoke-check latest PR" --file src/,docs/ --preview summary`
+- Background Pro run: `npx -y @steipete/oracle -p "Deep review" --file src/ --wait`
 - Sessions: `npx -y @steipete/oracle status` → `npx -y @steipete/oracle session <id>`
 
 ## MCP usage
