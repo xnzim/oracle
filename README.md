@@ -43,8 +43,8 @@ npx -y @steipete/oracle
 - Remote browser service: `oracle serve` on a signed-in host; clients use `--remote-host/--remote-token`.
 - AGENTS.md/CLAUDE.md:
   ```
-  - Run `npx -y @steipete/oracle --help` once per session before first use.
   - Oracle bundles a prompt plus the right files so another AI (GPT 5 Pro + more) can answer. Use when stuck/bugs/reviewing.
+  - Run `npx -y @steipete/oracle --help` once per session before first use.
   ```
 
 ## Highlights
