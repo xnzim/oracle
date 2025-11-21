@@ -139,7 +139,7 @@ See [docs/openai-endpoints.md](docs/openai-endpoints.md) for advanced Azure/Lite
 ## Sessions & background runs
 
 Every non-preview run writes to `~/.oracle/sessions/<slug>` with usage, cost hints, and logs. Use `oracle status` to list sessions, `oracle session <id>` to replay, and `oracle status --clear --hours 168` to prune. Set `ORACLE_HOME_DIR` to relocate storage.
-Add `--render` (alias `--render-markdown`) when attaching to pretty-print the stored markdown if your terminal supports color; falls back to raw text otherwise. During streaming runs, Oracle buffers the text and renders it as markdown at the end on rich TTYs; pass `--render-plain` if you prefer raw streaming output.
+Add `--render` (alias `--render-markdown`) when attaching to pretty-print the stored markdown if your terminal supports color; falls back to raw text otherwise. During streaming runs, Oracle buffers text and renders it as markdown at the end on rich TTYs; pass `--render-plain` to keep raw live streaming.
 Need a ready-made answer file? Add `--write-output path/to/file.md` to save just the final assistant message (multi-model writes one file per model by inserting `.<model>` before the extension; overwrites targets).
 
 **Recommendation:** Prefer the API engine when you have an API key (`--engine api` or just set `OPENAI_API_KEY`). The API delivers more reliable results and supports longer, uninterrupted runs than the browser engine in most cases.

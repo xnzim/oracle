@@ -61,6 +61,7 @@ export async function runOracle(options: RunOracleOptions, deps: RunOracleDeps =
     wait = defaultWait,
   } = deps;
   const writingToStdout = deps.write === undefined;
+  const stdoutWrite = process.stdout.write.bind(process.stdout);
   const baseUrl = options.baseUrl?.trim() || process.env.OPENAI_BASE_URL?.trim();
 
   const logVerbose = (message: string): void => {
@@ -285,7 +286,7 @@ export async function runOracle(options: RunOracleOptions, deps: RunOracleDeps =
   let response: OracleResponse | null = null;
   let elapsedMs = 0;
   let sawTextDelta = false;
-  // Buffer streamed text so we can re-render markdown once the stream ends (TTY only).
+  // Buffer streamed text so we can re-render markdown once the stream ends (TTY + non-plain mode).
   const streamedChunks: string[] = [];
   let answerHeaderPrinted = false;
   const allowAnswerHeader = options.suppressAnswerHeader !== true;
@@ -360,11 +361,17 @@ export async function runOracle(options: RunOracleOptions, deps: RunOracleDeps =
             sawTextDelta = true;
             ensureAnswerHeader();
             if (!options.silent && typeof event.delta === 'string') {
-              streamedChunks.push(event.delta);
-              const shouldDeferRender = isTty && !renderPlain;
-              // When deferring render to after streaming, keep logs (non-stdout sinks) hot but avoid live stdout spam.
-              if (!shouldDeferRender || !writingToStdout) {
-                write(event.delta);
+              // Always keep the log/bookkeeping sink up to date.
+              write(event.delta);
+              // For stdout: stream plainly when --render-plain, otherwise defer to final markdown render.
+              if (writingToStdout) {
+                if (renderPlain) {
+                  stdoutWrite(event.delta);
+                } else {
+                  streamedChunks.push(event.delta);
+                }
+              } else if (!renderPlain) {
+                streamedChunks.push(event.delta);
               }
             }
           }
@@ -393,21 +400,19 @@ export async function runOracle(options: RunOracleOptions, deps: RunOracleDeps =
   // biome-ignore lint/nursery/noUnnecessaryConditions: we only add spacing when any streamed text was printed
   if (sawTextDelta && !options.silent) {
     const fullStreamedText = streamedChunks.join('');
-    const shouldRenderAfterStream = isTty && !renderPlain;
+    const shouldRenderAfterStream = isTty && !renderPlain && fullStreamedText.length > 0;
     if (shouldRenderAfterStream) {
-      if (!writingToStdout && fullStreamedText.length > 0) {
-        write(fullStreamedText);
-      }
-      const rendered = fullStreamedText ? renderMarkdownAnsi(fullStreamedText) : '';
-      if (rendered) {
-        process.stdout.write(rendered);
-        if (!rendered.endsWith('\n')) {
-          process.stdout.write('\n');
-        }
+      const rendered = renderMarkdownAnsi(fullStreamedText);
+      stdoutWrite(rendered);
+      if (!rendered.endsWith('\n')) {
+        stdoutWrite('\n');
       }
       log('');
+    } else if (renderPlain && writingToStdout) {
+      // If we streamed plain text to stdout, still end with a newline for cleanliness.
+      stdoutWrite('\n');
+      log('');
     } else {
-      write('\n');
       log('');
     }
   }
@@ -447,9 +452,7 @@ export async function runOracle(options: RunOracleOptions, deps: RunOracleDeps =
   if (!options.silent) {
     // biome-ignore lint/nursery/noUnnecessaryConditions: flips true when streaming events arrive
     if (sawTextDelta) {
-      if (!isTty || renderPlain) {
-        write('\n');
-      }
+      // Already handled above (rendered or streamed); avoid double-printing.
     } else {
       ensureAnswerHeader();
       // Render markdown to ANSI in rich TTYs unless the caller opts out with --render-plain.
