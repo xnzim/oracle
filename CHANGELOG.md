@@ -33,8 +33,7 @@ All notable changes to this project will be documented in this file.
 - Session slugs now trim individual words to 10 characters to keep auto-generated IDs readable when prompts include very long tokens.
 - CLI: `--mode` is now a silent alias for `--engine` for backward compatibility with older docs/scripts; prefer `--engine`.
 - CLI guardrail: if a session with the same prompt is already running, new runs abort with guidance to reattach unless `--force` is provided (prevents unintended duplicate API/browser runs).
-- Worked towards Window support, there's more to do tho. Stay tuned!
-   
+
 ### Fixed
 - macOS notifier quarantine repair now ignores missing `xattr` and surfaces only actionable errors, stabilizing desktop notifications.
 - Browser assistant capture is more resilient: markdown cleanup no longer drops real answers and prompt-echo recovery keeps the assistant text intact.
