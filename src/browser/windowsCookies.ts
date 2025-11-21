@@ -7,17 +7,38 @@ import sqlite3 from 'sqlite3';
 import type { CookieParam } from './types.js';
 import { createRequire } from 'node:module';
 
-// win-dpapi is CommonJS; require it explicitly and support both named/default shapes.
-const dpapiModule = createRequire(import.meta.url)('win-dpapi') as {
-  Dpapi?: { unprotectData: (data: Buffer, entropy?: any, scope?: 'CurrentUser' | 'LocalMachine') => Buffer };
-  default?: { unprotectData: (data: Buffer, entropy?: any, scope?: 'CurrentUser' | 'LocalMachine') => Buffer };
-};
-const unprotectData =
-  dpapiModule?.Dpapi?.unprotectData ??
-  dpapiModule?.default?.unprotectData ??
-  ((_: Buffer) => {
-    throw new Error('win-dpapi unprotectData not available');
-  });
+type UnprotectFn = (data: Buffer, entropy?: any, scope?: 'CurrentUser' | 'LocalMachine') => Buffer;
+let cachedUnprotect: UnprotectFn | null = null;
+
+function getUnprotectData(): UnprotectFn {
+  if (cachedUnprotect) {
+    return cachedUnprotect;
+  }
+  try {
+    // win-dpapi is CommonJS; require it explicitly and support both named/default shapes.
+    const dpapiModule = createRequire(import.meta.url)('win-dpapi') as {
+      Dpapi?: { unprotectData: UnprotectFn };
+      default?: { unprotectData: UnprotectFn };
+    };
+    const unprotect =
+      dpapiModule?.Dpapi?.unprotectData ??
+      dpapiModule?.default?.unprotectData ??
+      ((_: Buffer) => {
+        throw new Error('win-dpapi unprotectData not available');
+      });
+    cachedUnprotect = unprotect;
+    return unprotect;
+  } catch (error) {
+    if (process.platform !== 'win32') {
+      // On macOS/Linux we don't need DPAPI; return a function that makes misuse obvious.
+      cachedUnprotect = () => {
+        throw new Error('win-dpapi is unavailable on non-Windows platforms');
+      };
+      return cachedUnprotect;
+    }
+    throw error;
+  }
+}
 
 type RawCookieRow = {
   name: string;
@@ -31,6 +52,9 @@ type RawCookieRow = {
 };
 
 export async function loadWindowsCookies(dbPath: string, filterNames?: Set<string>): Promise<CookieParam[]> {
+  if (process.platform !== 'win32') {
+    throw new Error('loadWindowsCookies is only supported on Windows');
+  }
   const localStatePath = await locateLocalState(dbPath);
   const aesKey = await extractWindowsAesKey(localStatePath);
   const rows = await readChromeCookiesDb(dbPath, filterNames);
@@ -62,6 +86,7 @@ function decryptCookie(value: Buffer, aesKey: Buffer): string {
     const decrypted = Buffer.concat([decipher.update(data), decipher.final()]);
     return decrypted.toString('utf8');
   }
+  const unprotectData = getUnprotectData();
   const unprotected: Buffer = unprotectData(value, null, 'CurrentUser');
   return Buffer.from(unprotected).toString('utf8');
 }
@@ -82,6 +107,7 @@ async function extractWindowsAesKey(localStatePath: string): Promise<Buffer> {
   if (!encKeyB64) throw new Error('encrypted_key missing in Local State');
   const encKey = Buffer.from(encKeyB64, 'base64');
   const dpapiBlob = encKey.slice(5); // strip "DPAPI"
+  const unprotectData = getUnprotectData();
   const unprotected: Buffer = unprotectData(dpapiBlob, null, 'CurrentUser');
   return Buffer.from(unprotected);
 }
