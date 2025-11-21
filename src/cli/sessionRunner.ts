@@ -10,6 +10,7 @@ import {
   extractTextOutput,
   } from '../oracle.js';
 import { runBrowserSessionExecution, type BrowserSessionRunnerDeps } from '../browser/sessionRunner.js';
+import { renderMarkdownAnsi } from './markdownRenderer.js';
 import { formatResponseMetadata, formatTransportMetadata } from './sessionDisplay.js';
 import { markErrorLogged } from './errorUtils.js';
 import {
@@ -120,6 +121,8 @@ export async function performSessionRun({
         cwd,
         version,
       });
+      // Render stored per-model logs with ANSI markdown when in a TTY, unless caller explicitly requested plain output.
+      const shouldRenderMarkdown = process.stdout.isTTY && runOptions.renderPlain !== true;
       for (const result of summary.fulfilled) {
         log('');
         log(kleur.bold(`[${result.model}]`));
@@ -128,8 +131,9 @@ export async function performSessionRun({
           log(dim('(no output recorded)'));
           continue;
         }
-        write(body);
-        if (!body.endsWith('\n')) {
+        const printable = shouldRenderMarkdown ? renderMarkdownAnsi(body) : body;
+        write(printable);
+        if (!printable.endsWith('\n')) {
           log('');
         }
       }
