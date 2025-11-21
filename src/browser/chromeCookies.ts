@@ -245,9 +245,6 @@ function looksLikePath(value: string): boolean {
   return value.includes('/') || value.includes('\\');
 }
 
-async function loadWindowsCookies(dbPath: string, filterNames?: Set<string>): Promise<CookieParam[]> {
-  const localState = await locateLocalState();
-  const aesKey = await extractWindowsAesKey(localState);
 async function defaultProfileRoot(): Promise<string> {
   const candidates: string[] = [];
   if (process.platform === 'darwin') {
