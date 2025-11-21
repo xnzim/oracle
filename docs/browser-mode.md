@@ -118,12 +118,13 @@ Prefer to keep Chrome entirely on the remote Mac (no DevTools tunneling, no manu
    oracle --engine browser \
      --remote-host 192.168.64.2:9473 \
      --remote-token c4e5f9... \
-     --prompt "Summarize the incident doc" \
-     --file docs/incidents/latest.md
-   ```
-   - `--remote-host` points the CLI at the VM.
-   - `--remote-token` matches the token printed by `oracle serve` (set `ORACLE_REMOTE_TOKEN` to avoid repeating it).
-   - Cookies are **not** transferred from your laptop. The service requires the host Chrome profile to be signed in; if not, it opens chatgpt.com and exits so you can log in, then restart `oracle serve`.
+   --prompt "Summarize the incident doc" \
+    --file docs/incidents/latest.md
+  ```
+  - `--remote-host` points the CLI at the VM.
+  - `--remote-token` matches the token printed by `oracle serve` (set `ORACLE_REMOTE_TOKEN` to avoid repeating it).
+  - You can also set defaults in `~/.oracle/config.json` (`remote.host`, `remote.token`) so you don’t need the flags; env vars still override those when present.
+  - Cookies are **not** transferred from your laptop. The service requires the host Chrome profile to be signed in; if not, it opens chatgpt.com and exits so you can log in, then restart `oracle serve`.
 
 3. **What happens**
    - The CLI assembles the composed prompt + file bundle locally, sends them to the VM, and streams log lines/answer text back through the same HTTP connection.

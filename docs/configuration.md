@@ -30,6 +30,12 @@ Oracle reads an optional per-user config from `~/.oracle/config.json`. The file 
     keepBrowser: false,
   },
 
+  // Default target for `oracle serve` remote browser runs
+  remote: {
+    host: "192.168.64.2:9473",
+    token: "c4e5f9...", // printed by `oracle serve`
+  },
+
   heartbeatSeconds: 30,     // default heartbeat interval
   filesReport: false,       // default per-file token report
   background: true,         // default background mode for API runs
@@ -44,6 +50,7 @@ Oracle reads an optional per-user config from `~/.oracle/config.json`. The file 
 CLI flags → `config.json` → environment → built-in defaults.
 
 - `engine`, `model`, `search`, `filesReport`, `heartbeatSeconds`, and `apiBaseUrl` in `config.json` override the auto-detected values unless explicitly set on the CLI.
+- Remote browser defaults follow the same order: `--remote-host/--remote-token` win, then `remote.host` / `remote.token` (or `remoteHost` / `remoteToken`) in the config, then `ORACLE_REMOTE_HOST` / `ORACLE_REMOTE_TOKEN` if still unset.
 - `OPENAI_API_KEY` only influences engine selection when neither the CLI nor `config.json` specify an engine (API when present, otherwise browser).
 - `ORACLE_NOTIFY*` env vars still layer on top of the config’s `notify` block.
 - `sessionRetentionHours` controls the default value for `--retain-hours`. When unset, `ORACLE_RETAIN_HOURS` (if present) becomes the fallback, and the CLI flag still wins over both.

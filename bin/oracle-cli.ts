@@ -619,8 +619,10 @@ async function runRootCommand(options: CliOptions): Promise<void> {
   };
   applyRetentionOption();
 
-  const remoteHost = options.remoteHost ?? process.env.ORACLE_REMOTE_HOST;
-  const remoteToken = options.remoteToken ?? process.env.ORACLE_REMOTE_TOKEN;
+  const remoteHost =
+    options.remoteHost ?? userConfig.remoteHost ?? userConfig.remote?.host ?? process.env.ORACLE_REMOTE_HOST;
+  const remoteToken =
+    options.remoteToken ?? userConfig.remoteToken ?? userConfig.remote?.token ?? process.env.ORACLE_REMOTE_TOKEN;
   if (remoteHost) {
     console.log(chalk.dim(`Remote browser host detected: ${remoteHost}`));
   }

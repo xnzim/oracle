@@ -19,7 +19,7 @@ Oracle gives your agents a simple, reliable way to **bundle a prompt plus the ri
 - **Browser engine** — Automates ChatGPT in Chrome so you can use your Pro account directly. Toggle with `--engine browser`; no API key required.
   - Duration flags such as `--browser-timeout` / `--browser-input-timeout` accept `ms`, `s`, `m`, or `h` (and you can chain them: `1h2m10s`). Defaults are 20 m / 30 s.
   - Point browser runs at either the root ChatGPT homepage (`https://chatgpt.com/`) or a specific workspace/folder with `--chatgpt-url https://chatgpt.com/g/.../project` (config: `browser.chatgptUrl`).
-  - Remote service: run `oracle serve` on a Mac that’s already signed into ChatGPT; it will exit and open chatgpt.com if the host profile isn’t logged in. Remote clients (`--remote-host/--remote-token`) reuse the host session; cookies never transfer from the client.
+  - Remote service: run `oracle serve` on a Mac that’s already signed into ChatGPT; it will exit and open chatgpt.com if the host profile isn’t logged in. Remote clients (`--remote-host/--remote-token`, or `remote.host` / `remote.token` in config) reuse the host session; cookies never transfer from the client.
 - **GPT-5.1 Codex** — `gpt-5.1-codex` (high reasoning) is available today via API. Codex Max isn’t exposed via API yet; once OpenAI flips the switch we’ll wire it up here. Codex models require `--engine api`.
 
 If you omit `--engine`, Oracle prefers the API engine when `OPENAI_API_KEY` is present; otherwise it falls back to browser mode. Switch explicitly with `-e, --engine {api|browser}` when you want to override the auto choice. Everything else (prompt assembly, file handling, session logging) stays the same.

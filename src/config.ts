@@ -30,6 +30,11 @@ export interface AzureConfig {
   apiVersion?: string;
 }
 
+export interface RemoteServiceConfig {
+  host?: string;
+  token?: string;
+}
+
 export interface UserConfig {
   engine?: EnginePreference;
   model?: string;
@@ -43,6 +48,9 @@ export interface UserConfig {
   apiBaseUrl?: string;
   azure?: AzureConfig;
   sessionRetentionHours?: number;
+  remote?: RemoteServiceConfig;
+  remoteHost?: string;
+  remoteToken?: string;
 }
 
 function resolveConfigPath(): string {
