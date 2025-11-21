@@ -194,6 +194,46 @@ describe('api key logging', () => {
     expect(writes.join('')).toContain('Yo bro.');
   });
 
+  test('shows cancel hint only for verbose or pro models', async () => {
+    const stream = new MockStream([], buildResponse());
+    const client = new MockClient(stream);
+    const logs: string[] = [];
+    await runOracle(
+      { prompt: 'hi', model: 'gpt-5.1', background: false },
+      {
+        apiKey: 'sk-test',
+        client,
+        log: (msg) => logs.push(msg),
+        write: () => true,
+      },
+    );
+    expect(logs.some((line) => line.includes('Press Ctrl+C'))).toBe(false);
+
+    logs.length = 0;
+    await runOracle(
+      { prompt: 'hi', model: 'gpt-5.1-pro', background: false },
+      {
+        apiKey: 'sk-test',
+        client,
+        log: (msg) => logs.push(msg),
+        write: () => true,
+      },
+    );
+    expect(logs.some((line) => line.includes('Press Ctrl+C'))).toBe(true);
+
+    logs.length = 0;
+    await runOracle(
+      { prompt: 'hi', model: 'gpt-5.1', verbose: true, background: false },
+      {
+        apiKey: 'sk-test',
+        client,
+        log: (msg) => logs.push(msg),
+        write: () => true,
+      },
+    );
+    expect(logs.some((line) => line.includes('Press Ctrl+C'))).toBe(true);
+  });
+
   test('suppresses the answer label when requested', async () => {
     const stream = new MockStream(
       [{ type: 'response.output_text.delta', delta: 'Hello world' }],

@@ -211,7 +211,9 @@ export async function runOracle(options: RunOracleOptions, deps: RunOracleDeps =
     if (isLongRunningModel) {
       log(dim('This model can take up to 60 minutes (usually replies much faster).'));
     }
-    log(dim('Press Ctrl+C to cancel.'));
+    if (options.verbose || isLongRunningModel) {
+      log(dim('Press Ctrl+C to cancel.'));
+    }
   }
   if (shouldReportFiles) {
     printFileTokenStats(fileTokenInfo, { inputTokenBudget, log });
