@@ -215,6 +215,13 @@ export async function serveRemote(options: RemoteServerOptions = {}): Promise<vo
   let cookies: CookieParam[] | null = null;
   let opened = false;
 
+  if (isWsl() && process.env.ORACLE_ALLOW_WSL_SERVE !== '1') {
+    console.log('WSL detected. For reliable browser automation, run `oracle serve` from Windows PowerShell/Command Prompt so we can use your Windows Chrome profile.');
+    console.log('If you want to stay in WSL anyway, set ORACLE_ALLOW_WSL_SERVE=1 and ensure a Linux Chrome is installed, then rerun.');
+    console.log('Alternatively, start Windows Chrome with --remote-debugging-port=9222 and use `--remote-chrome <windows-ip>:9222`.');
+    return;
+  }
+
   if (!preferManualLogin) {
     // Warm-up: ensure this host has a ChatGPT login before accepting runs.
     const result = await loadLocalChatgptCookies(console.log, CHATGPT_URL);
