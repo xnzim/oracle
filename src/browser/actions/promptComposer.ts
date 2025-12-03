@@ -74,6 +74,10 @@ export async function submitPrompt(
 
   await input.insertText({ text: prompt });
 
+  // Some pages (notably ChatGPT when subscriptions/widgets load) need a brief settle
+  // before the send button becomes enabled; give it a short breather to avoid races.
+  await delay(300);
+
   const primarySelectorLiteral = JSON.stringify(PROMPT_PRIMARY_SELECTOR);
   const fallbackSelectorLiteral = JSON.stringify(PROMPT_FALLBACK_SELECTOR);
   const verification = await runtime.evaluate({
