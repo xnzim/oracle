@@ -18,6 +18,7 @@ import { syncCookies } from './cookies.js';
 import { delay, estimateTokenCount } from './utils.js';
 import { buildClickDispatcher } from './actions/domEvents.js';
 import { ensureNotBlocked } from './actions/navigation.js';
+import { transferAttachmentViaDataTransfer } from './actions/attachmentDataTransfer.js';
 import {
   cleanupStaleProfileState,
   readChromePid,
@@ -45,6 +46,33 @@ const GENSPARK_SEND_SELECTORS = [
   'button[aria-label*="submit" i]',
   'button[data-testid*="send"]',
   'button[data-testid*="submit"]',
+];
+
+const GENSPARK_FILE_INPUT_SELECTORS = [
+  'input[type="file"]',
+  'input[type="file"][multiple]',
+  'input[type="file"][accept]',
+  'input[type="file"][data-testid*="file"]',
+  'input[type="file"][data-testid*="upload"]',
+  'input[type="file"][data-testid*="attachment"]',
+];
+
+const GENSPARK_ATTACHMENT_TRIGGER_SELECTORS = [
+  'button[aria-label*="upload" i]',
+  'button[aria-label*="attach" i]',
+  'button[aria-label*="attachment" i]',
+  'button[aria-label*="file" i]',
+  'button[title*="upload" i]',
+  'button[title*="attach" i]',
+  'button[title*="attachment" i]',
+  'button[title*="file" i]',
+  '[role="button"][aria-label*="upload" i]',
+  '[role="button"][aria-label*="attach" i]',
+  '[role="button"][aria-label*="attachment" i]',
+  '[role="button"][aria-label*="file" i]',
+  '[data-testid*="upload"]',
+  '[data-testid*="attachment"]',
+  '[data-testid*="file"]',
 ];
 
 const GENSPARK_RESPONSE_SELECTORS = [
@@ -143,13 +171,6 @@ export async function runGensparkBrowserMode(options: BrowserRunOptions): Promis
   }
 
   const attachments: BrowserAttachment[] = options.attachments ?? [];
-  if (attachments.length > 0) {
-    throw new BrowserAutomationError(
-      'Genspark browser mode does not support file uploads yet. ' +
-        'Re-run with --browser-attachments never (inline files) or use the ChatGPT browser engine.',
-      { stage: 'execute-browser', details: { provider: 'genspark' } },
-    );
-  }
 
   let config = resolveBrowserConfig({ ...(options.config ?? {}), provider: 'genspark' });
   const logger: BrowserLogger = options.log ?? ((_message: string) => {});
@@ -314,6 +335,7 @@ export async function runGensparkBrowserMode(options: BrowserRunOptions): Promis
     await raceWithDisconnect(ensureNotBlocked(Runtime, config.headless, logger));
     await raceWithDisconnect(waitForGensparkPrompt(Runtime, config.inputTimeoutMs ?? 60_000));
     await raceWithDisconnect(maybeSelectGensparkModel(Page, Runtime, Input, config.desiredModel, logger));
+    await raceWithDisconnect(uploadGensparkAttachments(Page, Runtime, Input, attachments, logger));
 
     await captureRuntimeSnapshot(Runtime, async (url, targetId) => {
       lastUrl = url ?? lastUrl;
@@ -450,6 +472,7 @@ async function runRemoteGensparkMode(
     await ensureNotBlocked(Runtime, config.headless, logger);
     await waitForGensparkPrompt(Runtime, config.inputTimeoutMs ?? 60_000);
     await maybeSelectGensparkModel(Page, Runtime, Input, config.desiredModel, logger);
+    await uploadGensparkAttachments(Page, Runtime, Input, options.attachments ?? [], logger);
     const urlSnapshot = await captureRuntimeSnapshot(Runtime, async (url) => {
       lastUrl = url ?? lastUrl;
       await emitRuntimeHint();
@@ -659,6 +682,140 @@ async function maybeSelectGensparkModel(
     const message = error instanceof Error ? error.message : String(error);
     log(`Genspark model selection failed: ${message}`);
   }
+}
+
+async function uploadGensparkAttachments(
+  Page: ChromeClient['Page'],
+  Runtime: ChromeClient['Runtime'],
+  Input: ChromeClient['Input'],
+  attachments: BrowserAttachment[],
+  logger: BrowserLogger,
+): Promise<void> {
+  if (!attachments.length) return;
+  const log = logger.verbose ? logger : () => {};
+  let contexts = await resolveGensparkExecutionContexts(Page, log);
+  if (!contexts.length) {
+    contexts = [];
+  }
+  let target = await resolveGensparkFileInput(Runtime, Input, contexts, logger);
+  if (!target) {
+    throw new BrowserAutomationError('Unable to locate a Genspark file attachment input.', {
+      stage: 'execute-browser',
+      details: { provider: 'genspark' },
+    });
+  }
+  if (attachments.length > 1 && target.multiple === false) {
+    throw new BrowserAutomationError(
+      'Genspark file input does not accept multiple files. Use --browser-bundle-files or pass a single file.',
+      { stage: 'execute-browser', details: { provider: 'genspark' } },
+    );
+  }
+
+  for (const attachment of attachments) {
+    target = (await resolveGensparkFileInput(Runtime, Input, contexts, logger)) ?? target;
+    logger(`Uploading attachment: ${attachment.displayPath}`);
+    const transferResult = await transferAttachmentViaDataTransfer(Runtime, attachment, target.selector, {
+      contextId: target.contextId,
+      append: true,
+    });
+    if (transferResult.alreadyPresent) {
+      log(`Attachment already queued: ${transferResult.fileName}`);
+      continue;
+    }
+    await waitForGensparkAttachmentQueued(
+      Runtime,
+      target.selector,
+      path.basename(attachment.path),
+      target.contextId,
+      15_000,
+      logger,
+    );
+    await delay(250);
+  }
+}
+
+async function resolveGensparkFileInput(
+  Runtime: ChromeClient['Runtime'],
+  Input: ChromeClient['Input'],
+  contexts: number[],
+  logger: BrowserLogger,
+): Promise<{ selector: string; contextId?: number; multiple?: boolean } | null> {
+  const log = logger.verbose ? logger : () => {};
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const results = await evaluateInContextsWithIds(Runtime, contexts, buildGensparkFileInputExpression());
+    const found = results.find((result) => result.value && (result.value as { found?: boolean }).found);
+    if (found?.value && typeof found.value === 'object') {
+      const value = found.value as { selector?: string; multiple?: boolean };
+      if (value.selector) {
+        return { selector: value.selector, multiple: value.multiple, contextId: found.contextId };
+      }
+    }
+    const clicked = results.some((result) => result.value && (result.value as { clicked?: boolean }).clicked);
+    if (clicked) {
+      await delay(300);
+      continue;
+    }
+    break;
+  }
+
+  const targetResult = findTargetInContextResults(
+    await evaluateInContextsWithIds(Runtime, contexts, buildGensparkAttachmentTriggerTargetExpression()),
+  );
+  if (targetResult?.target) {
+    log('Retrying Genspark attachment picker click via native mouse event.');
+    await dispatchNativeClick(Input, targetResult.target);
+    await delay(400);
+    const results = await evaluateInContextsWithIds(Runtime, contexts, buildGensparkFileInputExpression());
+    const found = results.find((result) => result.value && (result.value as { found?: boolean }).found);
+    if (found?.value && typeof found.value === 'object') {
+      const value = found.value as { selector?: string; multiple?: boolean };
+      if (value.selector) {
+        return { selector: value.selector, multiple: value.multiple, contextId: found.contextId };
+      }
+    }
+  }
+
+  return null;
+}
+
+async function waitForGensparkAttachmentQueued(
+  Runtime: ChromeClient['Runtime'],
+  selector: string,
+  expectedName: string,
+  contextId: number | undefined,
+  timeoutMs: number,
+  logger: BrowserLogger,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  let lastNames: string[] = [];
+  while (Date.now() < deadline) {
+    const { result } = await Runtime.evaluate({
+      expression: buildGensparkAttachmentQueuedExpression(selector, expectedName),
+      returnByValue: true,
+      contextId,
+    });
+    const value = result?.value as { queued?: boolean; names?: string[] } | undefined;
+    if (value?.queued) return;
+    if (Array.isArray(value?.names)) {
+      lastNames = value?.names ?? lastNames;
+    }
+    await delay(200);
+  }
+  const suffix = lastNames.length > 0 ? ` (input has: ${lastNames.join(', ')})` : '';
+  logger(`Attachment did not appear in the file input before timeout${suffix}`);
+}
+
+function findTargetInContextResults(
+  results: Array<{ contextId?: number; value: unknown }>,
+): { target: { x: number; y: number }; label?: string } | null {
+  for (const result of results) {
+    if (!result?.value || typeof result.value !== 'object') continue;
+    const target = (result.value as { target?: { x?: number; y?: number } }).target;
+    if (target && Number.isFinite(target.x) && Number.isFinite(target.y)) {
+      return { target: { x: target.x as number, y: target.y as number }, label: (result.value as { label?: string }).label };
+    }
+  }
+  return null;
 }
 
 async function focusPrompt(Runtime: ChromeClient['Runtime']): Promise<void> {
@@ -1311,6 +1468,232 @@ function buildModelOptionTargetExpression(desiredModel: string): string {
   })()`;
 }
 
+function buildGensparkFileInputExpression(): string {
+  const selectorsLiteral = JSON.stringify(GENSPARK_FILE_INPUT_SELECTORS);
+  const triggerSelectorsLiteral = JSON.stringify(GENSPARK_ATTACHMENT_TRIGGER_SELECTORS);
+  return `(() => {
+    ${buildClickDispatcher()}
+    const selectors = ${selectorsLiteral};
+    const triggerSelectors = ${triggerSelectorsLiteral};
+    const keywords = /(upload|attach|attachment|file|paperclip|clip)/i;
+    const collectRoots = (root) => {
+      const roots = [root];
+      const stack = [root];
+      while (stack.length) {
+        const current = stack.pop();
+        const walkerRoot = current instanceof Document ? current.body : current;
+        if (!walkerRoot) continue;
+        const walker = document.createTreeWalker(walkerRoot, NodeFilter.SHOW_ELEMENT);
+        let node = walker.currentNode;
+        while (node) {
+          if (node.shadowRoot) {
+            roots.push(node.shadowRoot);
+            stack.push(node.shadowRoot);
+          }
+          node = walker.nextNode();
+        }
+      }
+      return roots;
+    };
+    const queryAllDeep = (selector, root = document) => {
+      const results = [];
+      const roots = collectRoots(root);
+      for (const rootNode of roots) {
+        if (rootNode.querySelectorAll) {
+          results.push(...rootNode.querySelectorAll(selector));
+        }
+      }
+      return results;
+    };
+    const isVisible = (node) => {
+      if (!node || !(node instanceof HTMLElement)) return false;
+      const style = window.getComputedStyle(node);
+      if (style.visibility === 'hidden' || style.display === 'none') return false;
+      const rect = node.getBoundingClientRect();
+      return rect.width > 4 && rect.height > 4;
+    };
+    const isDisabled = (node) => {
+      if (!node || !(node instanceof HTMLElement)) return false;
+      if (node.getAttribute?.('disabled') != null) return true;
+      if (node.getAttribute?.('aria-disabled') === 'true') return true;
+      return node.classList.contains('disabled');
+    };
+    const markInput = (input) => {
+      if (!(input instanceof HTMLInputElement) || input.type !== 'file') return null;
+      input.setAttribute('data-oracle-genspark-input', 'true');
+      return {
+        found: true,
+        selector: 'input[data-oracle-genspark-input="true"]',
+        multiple: Boolean(input.multiple),
+      };
+    };
+    const findInput = () => {
+      for (const selector of selectors) {
+        const inputs = queryAllDeep(selector);
+        for (const input of inputs) {
+          if (input instanceof HTMLInputElement && input.type === 'file') {
+            return input;
+          }
+        }
+      }
+      return null;
+    };
+    const existing = findInput();
+    if (existing) {
+      return markInput(existing);
+    }
+
+    const candidates = [];
+    for (const selector of triggerSelectors) {
+      const nodes = queryAllDeep(selector);
+      for (const node of nodes) {
+        if (!isVisible(node) || isDisabled(node)) continue;
+        candidates.push(node);
+      }
+    }
+    if (candidates.length === 0) {
+      const buttons = queryAllDeep('button, [role="button"]');
+      for (const node of buttons) {
+        if (!isVisible(node) || isDisabled(node)) continue;
+        const text = (node.innerText || node.textContent || '').trim();
+        const aria = node.getAttribute?.('aria-label') || '';
+        const title = node.getAttribute?.('title') || '';
+        if (keywords.test(`${text} ${aria} ${title}`)) {
+          candidates.push(node);
+        }
+      }
+    }
+    if (candidates.length > 0) {
+      dispatchClickSequence(candidates[0]);
+      const after = findInput();
+      if (after) return markInput(after);
+      return { found: false, clicked: true };
+    }
+    return { found: false, reason: 'no-input' };
+  })()`;
+}
+
+function buildGensparkAttachmentTriggerTargetExpression(): string {
+  const selectorsLiteral = JSON.stringify(GENSPARK_ATTACHMENT_TRIGGER_SELECTORS);
+  return `(() => {
+    const selectors = ${selectorsLiteral};
+    const keywords = /(upload|attach|attachment|file|paperclip|clip)/i;
+    const collectRoots = (root) => {
+      const roots = [root];
+      const stack = [root];
+      while (stack.length) {
+        const current = stack.pop();
+        const walkerRoot = current instanceof Document ? current.body : current;
+        if (!walkerRoot) continue;
+        const walker = document.createTreeWalker(walkerRoot, NodeFilter.SHOW_ELEMENT);
+        let node = walker.currentNode;
+        while (node) {
+          if (node.shadowRoot) {
+            roots.push(node.shadowRoot);
+            stack.push(node.shadowRoot);
+          }
+          node = walker.nextNode();
+        }
+      }
+      return roots;
+    };
+    const queryAllDeep = (selector, root = document) => {
+      const results = [];
+      const roots = collectRoots(root);
+      for (const rootNode of roots) {
+        if (rootNode.querySelectorAll) {
+          results.push(...rootNode.querySelectorAll(selector));
+        }
+      }
+      return results;
+    };
+    const isVisible = (node) => {
+      if (!node || !(node instanceof HTMLElement)) return false;
+      const style = window.getComputedStyle(node);
+      if (style.visibility === 'hidden' || style.display === 'none') return false;
+      const rect = node.getBoundingClientRect();
+      return rect.width > 4 && rect.height > 4;
+    };
+    const isDisabled = (node) => {
+      if (!node || !(node instanceof HTMLElement)) return false;
+      if (node.getAttribute?.('disabled') != null) return true;
+      if (node.getAttribute?.('aria-disabled') === 'true') return true;
+      return node.classList.contains('disabled');
+    };
+    const toTarget = (node) => {
+      if (!node || !(node instanceof HTMLElement)) return null;
+      const rect = node.getBoundingClientRect();
+      if (!rect || rect.width <= 1 || rect.height <= 1) return null;
+      let x = rect.left + rect.width / 2;
+      let y = rect.top + rect.height / 2;
+      if (window.frameElement instanceof HTMLElement) {
+        const frameRect = window.frameElement.getBoundingClientRect();
+        x += frameRect.left;
+        y += frameRect.top;
+      }
+      return { x, y };
+    };
+    const candidates = [];
+    for (const selector of selectors) {
+      const nodes = queryAllDeep(selector);
+      for (const node of nodes) {
+        if (!isVisible(node) || isDisabled(node)) continue;
+        const text = (node.innerText || node.textContent || '').trim();
+        const aria = node.getAttribute?.('aria-label') || '';
+        const title = node.getAttribute?.('title') || '';
+        const label = `${text} ${aria} ${title}`.trim();
+        if (!label) continue;
+        if (!keywords.test(label)) continue;
+        candidates.push({ node, label });
+      }
+    }
+    if (candidates.length === 0) {
+      const buttons = queryAllDeep('button, [role="button"]');
+      for (const node of buttons) {
+        if (!isVisible(node) || isDisabled(node)) continue;
+        const text = (node.innerText || node.textContent || '').trim();
+        const aria = node.getAttribute?.('aria-label') || '';
+        const title = node.getAttribute?.('title') || '';
+        const label = `${text} ${aria} ${title}`.trim();
+        if (!label) continue;
+        if (!keywords.test(label)) continue;
+        candidates.push({ node, label });
+      }
+    }
+    if (!candidates.length) return { found: false, reason: 'no-trigger' };
+    const best = candidates[0];
+    const target = toTarget(best.node);
+    if (!target) return { found: false, reason: 'no-target' };
+    return { found: true, label: best.label, target };
+  })()`;
+}
+
+function buildGensparkAttachmentQueuedExpression(selector: string, expectedName: string): string {
+  const selectorLiteral = JSON.stringify(selector);
+  const expectedLiteral = JSON.stringify(expectedName.toLowerCase());
+  return `(() => {
+    const input = document.querySelector(${selectorLiteral});
+    const names = [];
+    if (input && input instanceof HTMLInputElement) {
+      for (const file of Array.from(input.files || [])) {
+        if (file?.name) names.push(file.name.toLowerCase());
+      }
+    }
+    const expected = ${expectedLiteral};
+    const queued = names.includes(expected);
+    if (queued) return { queued, names };
+    const textMatch = (() => {
+      const haystack = Array.from(document.querySelectorAll('[data-testid*="upload"],[data-testid*="attachment"],[class*="upload"],[class*="attachment"],[aria-label*="remove"],[title*="remove"]'));
+      for (const node of haystack) {
+        const text = (node.textContent || '').toLowerCase();
+        if (text && text.includes(expected)) return true;
+      }
+      return false;
+    })();
+    return { queued: queued || textMatch, names };
+  })()`;
+}
+
 function buildPromptFocusExpression(): string {
   const selectorsLiteral = JSON.stringify(GENSPARK_PROMPT_SELECTORS);
   return `(() => {
@@ -1520,6 +1903,34 @@ async function evaluateInContexts(
       });
       if (evalResult?.result?.value !== undefined) {
         results.push(evalResult.result.value);
+      }
+    } catch {
+      // ignore evaluation failures in a given context
+    }
+  }
+  return results;
+}
+
+async function evaluateInContextsWithIds(
+  Runtime: ChromeClient['Runtime'],
+  contexts: number[],
+  expression: string,
+): Promise<Array<{ contextId?: number; value: unknown }>> {
+  if (!contexts.length) {
+    const single = await Runtime.evaluate({ expression, returnByValue: true });
+    if (single?.result?.value === undefined) return [];
+    return [{ value: single.result.value }];
+  }
+  const results: Array<{ contextId?: number; value: unknown }> = [];
+  for (const contextId of contexts) {
+    try {
+      const evalResult = await Runtime.evaluate({
+        expression,
+        returnByValue: true,
+        contextId,
+      });
+      if (evalResult?.result?.value !== undefined) {
+        results.push({ contextId, value: evalResult.result.value });
       }
     } catch {
       // ignore evaluation failures in a given context

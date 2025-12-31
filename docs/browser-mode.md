@@ -43,11 +43,11 @@ oracle --engine browser \
   --browser-model-label "GPT-5.2 Pro" \
   --model genspark \
   --prompt "Summarize the attached incident notes" \
-  --browser-inline-files \
   --file "docs/incidents/*.md"
 ```
 
 Note: Genspark model selection is driven through the UI picker when `--browser-model-label` is set. Oracle will fall back to native mouse clicks if the site ignores synthetic events, so the dropdown may open/close too quickly to notice.
+Genspark file uploads use the browser's file input via data transfer (20 MB per file limit); add `--browser-inline-files` if you want to paste file contents instead.
 
 ## Current Pipeline
 
@@ -59,7 +59,7 @@ Note: Genspark model selection is driven through the UI picker when `--browser-m
    - Immediately probes `/backend-api/me` in the ChatGPT tab to verify the session is authenticated; if the endpoint returns 401/403 we abort early with a login-specific error instead of timing out waiting for the composer.
    - When `--file` inputs would push the pasted composer content over ~60k characters, we switch to uploading attachments (optionally bundled) and wait for ChatGPT to re-enable the send button before submitting the combined system+user prompt.
    - Cleans up the temporary profile unless `--browser-keep-browser` is passed.
-   - Genspark automation is a lighter-weight path that navigates to `https://www.genspark.ai/agents?type=ai_chat`, optionally selects a model label via the picker, pastes the prompt, and waits for the latest assistant response (file uploads are not supported yet).
+   - Genspark automation is a lighter-weight path that navigates to `https://www.genspark.ai/agents?type=ai_chat`, optionally selects a model label via the picker, uploads attachments via the file input, pastes the prompt, and waits for the latest assistant response.
 3. **Session integration** – browser sessions use the normal log writer, add `mode: "browser"` plus `browser.config/runtime` metadata, and log the Chrome PID/port so `oracle session <id>` (or `oracle status <id>`) shows a marker for the background Chrome process.
 4. **Usage accounting** – we estimate input tokens with the same tokenizer used for API runs and estimate output tokens via `estimateTokenCount`. `oracle status` therefore shows comparable cost/timing info even though the call ran through the browser.
 

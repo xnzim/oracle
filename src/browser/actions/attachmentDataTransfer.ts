@@ -8,7 +8,8 @@ export async function transferAttachmentViaDataTransfer(
   runtime: ChromeClient['Runtime'],
   attachment: BrowserAttachment,
   selector: string,
-): Promise<{ fileName: string; size: number }> {
+  options?: { contextId?: number; append?: boolean },
+): Promise<{ fileName: string; size: number; alreadyPresent?: boolean }> {
   const fileContent = await readFile(attachment.path);
   if (fileContent.length > MAX_DATA_TRANSFER_BYTES) {
     throw new Error(
@@ -47,6 +48,17 @@ export async function transferAttachmentViaDataTransfer(
     });
 
     const dataTransfer = new DataTransfer();
+    const append = Boolean(${JSON.stringify(options?.append ?? false)});
+    const existingFiles = Array.from(fileInput.files || []);
+    const existingNames = new Set(existingFiles.map((existing) => existing.name));
+    if (append && fileInput.multiple && existingNames.has(file.name)) {
+      return { success: true, fileName: file.name, size: file.size, alreadyPresent: true };
+    }
+    if (append && fileInput.multiple) {
+      for (const existing of existingFiles) {
+        dataTransfer.items.add(existing);
+      }
+    }
     dataTransfer.items.add(file);
     let assigned = false;
 
@@ -87,7 +99,7 @@ export async function transferAttachmentViaDataTransfer(
     return { success: true, fileName: file.name, size: file.size };
   })()`;
 
-  const evalResult = await runtime.evaluate({ expression, returnByValue: true });
+  const evalResult = await runtime.evaluate({ expression, returnByValue: true, contextId: options?.contextId });
   if (evalResult.exceptionDetails) {
     const description = evalResult.exceptionDetails.text ?? 'JS evaluation failed';
     throw new Error(`Failed to transfer file to browser: ${description}`);
@@ -97,7 +109,13 @@ export async function transferAttachmentViaDataTransfer(
     throw new Error('Failed to transfer file to browser: unexpected evaluation result');
   }
 
-  const uploadResult = evalResult.result.value as { success?: boolean; error?: string; fileName?: string; size?: number };
+  const uploadResult = evalResult.result.value as {
+    success?: boolean;
+    error?: string;
+    fileName?: string;
+    size?: number;
+    alreadyPresent?: boolean;
+  };
   if (!uploadResult.success) {
     throw new Error(`Failed to transfer file to browser: ${uploadResult.error || 'Unknown error'}`);
   }
@@ -105,6 +123,7 @@ export async function transferAttachmentViaDataTransfer(
   return {
     fileName: uploadResult.fileName ?? fileName,
     size: typeof uploadResult.size === 'number' ? uploadResult.size : fileContent.length,
+    alreadyPresent: uploadResult.alreadyPresent,
   };
 }
 
