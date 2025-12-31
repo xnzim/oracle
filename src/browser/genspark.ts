@@ -1558,7 +1558,8 @@ function buildGensparkFileInputExpression(): string {
         const text = (node.innerText || node.textContent || '').trim();
         const aria = node.getAttribute?.('aria-label') || '';
         const title = node.getAttribute?.('title') || '';
-        if (keywords.test(`${text} ${aria} ${title}`)) {
+        const label = [text, aria, title].filter(Boolean).join(' ').trim();
+        if (keywords.test(label)) {
           candidates.push(node);
         }
       }
@@ -1641,7 +1642,7 @@ function buildGensparkAttachmentTriggerTargetExpression(): string {
         const text = (node.innerText || node.textContent || '').trim();
         const aria = node.getAttribute?.('aria-label') || '';
         const title = node.getAttribute?.('title') || '';
-        const label = `${text} ${aria} ${title}`.trim();
+        const label = [text, aria, title].filter(Boolean).join(' ').trim();
         if (!label) continue;
         if (!keywords.test(label)) continue;
         candidates.push({ node, label });
@@ -1654,7 +1655,7 @@ function buildGensparkAttachmentTriggerTargetExpression(): string {
         const text = (node.innerText || node.textContent || '').trim();
         const aria = node.getAttribute?.('aria-label') || '';
         const title = node.getAttribute?.('title') || '';
-        const label = `${text} ${aria} ${title}`.trim();
+        const label = [text, aria, title].filter(Boolean).join(' ').trim();
         if (!label) continue;
         if (!keywords.test(label)) continue;
         candidates.push({ node, label });
