@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import { createWriteStream } from 'node:fs';
 import type { WriteStream } from 'node:fs';
 import net from 'node:net';
-import type { BrowserModelStrategy, CookieParam } from './browser/types.js';
+import type { BrowserModelStrategy, BrowserProvider, CookieParam } from './browser/types.js';
 import type { TransportFailureReason, AzureOptions, ModelName, ThinkingTimeLevel } from './oracle.js';
 import { DEFAULT_MODEL } from './oracle.js';
 import { safeModelSlug } from './oracle/modelResolver.js';
@@ -12,6 +12,7 @@ import { getOracleHomeDir } from './oracleHome.js';
 export type SessionMode = 'api' | 'browser';
 
 export interface BrowserSessionConfig {
+  provider?: BrowserProvider;
   chromeProfile?: string | null;
   chromePath?: string | null;
   chromeCookiePath?: string | null;

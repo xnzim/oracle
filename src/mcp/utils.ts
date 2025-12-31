@@ -2,7 +2,7 @@ import type { RunOracleOptions } from '../oracle.js';
 import type { EngineMode } from '../cli/engine.js';
 import type { UserConfig } from '../config.js';
 import { resolveRunOptionsFromConfig } from '../cli/runOptions.js';
-import { Launcher } from 'chrome-launcher';
+import { resolveBrowserExecutablePath } from '../browser/chromePaths.js';
 
 export function mapConsultToRunOptions({
   prompt,
@@ -40,12 +40,9 @@ export function ensureBrowserAvailable(engine: EngineMode): string | null {
   if (engine !== 'browser') {
     return null;
   }
-  if (process.env.CHROME_PATH) {
-    return null;
-  }
-  const found = Launcher.getFirstInstallation();
-  if (!found) {
-    return 'Browser engine unavailable: no Chrome installation found and CHROME_PATH is unset.';
+  const resolved = resolveBrowserExecutablePath(undefined);
+  if (resolved.source === 'none') {
+    return 'Browser engine unavailable: no Chrome or Brave installation found and CHROME_PATH is unset.';
   }
   return null;
 }

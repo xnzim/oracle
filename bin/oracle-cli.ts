@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { once } from 'node:events';
 import { Command, Option } from 'commander';
 import type { OptionValues } from 'commander';
+import type { BrowserProvider } from '../src/browser/provider.js';
 // Allow `npx @steipete/oracle oracle-mcp` to resolve the MCP server even though npx runs the default binary.
 if (process.argv[2] === 'oracle-mcp') {
   const { startMcpServer } = await import('../src/mcp/server.js');
@@ -20,6 +21,7 @@ import { DEFAULT_MODEL, MODEL_CONFIGS, runOracle, readFiles, estimateRequestToke
 import { isKnownModel } from '../src/oracle/modelResolver.js';
 import type { ModelName, PreviewMode, RunOracleOptions } from '../src/oracle.js';
 import { CHATGPT_URL, normalizeChatgptUrl } from '../src/browserMode.js';
+import { resolveBrowserProvider } from '../src/browser/provider.js';
 import { createRemoteBrowserExecutor } from '../src/remote/client.js';
 import { createGeminiWebExecutor } from '../src/gemini-web/index.js';
 import { applyHelpStyling } from '../src/cli/help.js';
@@ -106,6 +108,8 @@ interface CliOptions extends OptionValues {
   browserChromeProfile?: string;
   browserChromePath?: string;
   browserCookiePath?: string;
+  browserProvider?: BrowserProvider;
+  browserModelLabel?: string;
   chatgptUrl?: string;
   browserUrl?: string;
   browserTimeout?: string;
@@ -243,7 +247,7 @@ program
   .option('-s, --slug <words>', 'Custom session slug (3-5 words).')
   .option(
     '-m, --model <model>',
-    'Model to target (gpt-5.2-pro default; also supports gpt-5.1-pro alias). Also gpt-5-pro, gpt-5.1, gpt-5.1-codex API-only, gpt-5.2, gpt-5.2-instant, gpt-5.2-pro, gemini-3-pro, claude-4.5-sonnet, claude-4.1-opus, or ChatGPT labels like "5.2 Thinking" for browser runs).',
+    'Model to target (gpt-5.2-pro default; also supports gpt-5.1-pro alias). Also gpt-5-pro, gpt-5.1, gpt-5.1-codex API-only, gpt-5.2, gpt-5.2-instant, gpt-5.2-pro, gemini-3-pro, genspark, claude-4.5-sonnet, claude-4.1-opus, or ChatGPT labels like "5.2 Thinking" for browser runs).',
     normalizeModelOption,
   )
   .addOption(
@@ -339,12 +343,17 @@ program
     new Option('--browser-cookie-path <path>', 'Explicit Chrome/Chromium cookie DB path for session reuse.'),
   )
   .addOption(
+    new Option('--browser-provider <provider>', 'Browser automation target (chatgpt or genspark).')
+      .choices(['chatgpt', 'genspark']),
+  )
+  .addOption(new Option('--browser-model-label <label>', 'Override the model label used by browser pickers.'))
+  .addOption(
     new Option(
       '--chatgpt-url <url>',
       `Override the ChatGPT web URL (e.g., workspace/folder like https://chatgpt.com/g/.../project; default ${CHATGPT_URL}).`,
     ),
   )
-  .addOption(new Option('--browser-url <url>', `Alias for --chatgpt-url (default ${CHATGPT_URL}).`).hideHelp())
+  .addOption(new Option('--browser-url <url>', 'Override the browser target URL (alias for --chatgpt-url).').hideHelp())
   .addOption(new Option('--browser-timeout <ms|s|m>', 'Maximum time to wait for an answer (default 1200s / 20m).').hideHelp())
   .addOption(
     new Option('--browser-input-timeout <ms|s|m>', 'Maximum time to wait for the prompt textarea (default 30s).').hideHelp(),
@@ -805,10 +814,22 @@ async function runRootCommand(options: CliOptions): Promise<void> {
       : resolveApiModel(cliModelArg || DEFAULT_MODEL);
   const primaryModelCandidate = normalizedMultiModels[0] ?? resolvedModelCandidate;
   const isGemini = primaryModelCandidate.startsWith('gemini');
+  const isGenspark = primaryModelCandidate.startsWith('genspark');
+  const multiModelsIncludeGenspark = normalizedMultiModels.some((model) => model.startsWith('genspark'));
   const isCodex = primaryModelCandidate.startsWith('gpt-5.1-codex');
   const isClaude = primaryModelCandidate.startsWith('claude');
   const userForcedBrowser = options.browser || options.engine === 'browser';
-  const isBrowserCompatible = (model: string) => model.startsWith('gpt-') || model.startsWith('gemini');
+  if (multiModelsIncludeGenspark) {
+    throw new Error('Genspark runs are browser-only and cannot be used with --models.');
+  }
+  if (isGenspark && engine !== 'browser') {
+    if (preferredEngine) {
+      throw new Error('Genspark runs are browser-only. Re-run with --engine browser --browser-provider genspark.');
+    }
+    engine = 'browser';
+  }
+  const isBrowserCompatible = (model: string) =>
+    model.startsWith('gpt-') || model.startsWith('gemini') || model.startsWith('genspark');
   const hasNonBrowserCompatibleTarget =
     (engine === 'browser' || userForcedBrowser) &&
     (normalizedMultiModels.length > 0
@@ -816,7 +837,7 @@ async function runRootCommand(options: CliOptions): Promise<void> {
       : !isBrowserCompatible(resolvedModelCandidate));
   if (hasNonBrowserCompatibleTarget) {
     throw new Error(
-      'Browser engine only supports GPT and Gemini models. Re-run with --engine api for Grok, Claude, or other models.'
+      'Browser engine only supports GPT, Gemini, and Genspark. Re-run with --engine api for Grok, Claude, or other models.',
     );
   }
   if (isClaude && engine === 'browser') {
@@ -1012,8 +1033,19 @@ async function runRootCommand(options: CliOptions): Promise<void> {
   });
 
   const sessionMode: SessionMode = engine === 'browser' ? 'browser' : 'api';
+  const browserProvider =
+    sessionMode === 'browser'
+      ? resolveBrowserProvider({
+          provider: options.browserProvider,
+          url: options.browserUrl,
+          chatgptUrl: options.chatgptUrl,
+        })
+      : 'chatgpt';
   const browserModelLabelOverride =
-    sessionMode === 'browser' ? resolveBrowserModelLabel(cliModelArg, resolvedModel) : undefined;
+    sessionMode === 'browser'
+      ? options.browserModelLabel ??
+        (browserProvider === 'chatgpt' ? resolveBrowserModelLabel(cliModelArg, resolvedModel) : undefined)
+      : undefined;
   const browserConfig =
     sessionMode === 'browser'
       ? await buildBrowserConfig({
@@ -1270,7 +1302,8 @@ function printDebugHelp(cliName: string): void {
     ['--browser-chrome-profile <name>', 'Reuse cookies from a specific Chrome profile.'],
     ['--browser-chrome-path <path>', 'Point to a custom Chrome/Chromium binary.'],
     ['--browser-cookie-path <path>', 'Use a specific Chrome/Chromium cookie store file.'],
-    ['--browser-url <url>', 'Alias for --chatgpt-url.'],
+    ['--browser-provider <provider>', 'Browser automation target (chatgpt or genspark).'],
+    ['--browser-url <url>', 'Override the browser target URL (alias for --chatgpt-url).'],
     ['--browser-timeout <ms|s|m>', 'Cap total wait time for the assistant response.'],
     ['--browser-input-timeout <ms|s|m>', 'Cap how long we wait for the composer textarea.'],
     ['--browser-cookie-wait <ms|s|m>', 'Wait before retrying cookie sync when Chrome cookies are empty or locked.'],

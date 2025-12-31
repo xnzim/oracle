@@ -172,6 +172,7 @@ describe('resolveApiModel', () => {
     expect(resolveApiModel('Gemini')).toBe('gemini-3-pro');
     expect(resolveApiModel('grok')).toBe('grok-4.1');
     expect(resolveApiModel('Grok 4.1')).toBe('grok-4.1');
+    expect(resolveApiModel('Genspark')).toBe('genspark');
   });
 
   test('rejects codex max until API is available', () => {
@@ -223,6 +224,7 @@ describe('inferModelFromLabel', () => {
     expect(inferModelFromLabel('grok')).toBe('grok-4.1');
     expect(inferModelFromLabel('Grok 4.1')).toBe('grok-4.1');
     expect(inferModelFromLabel('Grok-4-1')).toBe('grok-4.1');
+    expect(inferModelFromLabel('Genspark')).toBe('genspark');
   });
 
   test('falls back to gpt-5.2-pro when label empty and to gpt-5.2 for other ambiguous strings', () => {

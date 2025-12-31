@@ -8,6 +8,7 @@ import CDP from 'chrome-remote-interface';
 import { launch, Launcher, type LaunchedChrome } from 'chrome-launcher';
 import type { BrowserLogger, ResolvedBrowserConfig, ChromeClient } from './types.js';
 import { cleanupStaleProfileState } from './profileState.js';
+import { resolveBrowserExecutablePath } from './chromePaths.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -17,21 +18,25 @@ export async function launchChrome(config: ResolvedBrowserConfig, userDataDir: s
   const debugPort = config.debugPort ?? parseDebugPortEnv();
   const chromeFlags = buildChromeFlags(config.headless ?? false, debugBindAddress);
   const usePatchedLauncher = Boolean(connectHost && connectHost !== '127.0.0.1');
+  const resolvedExecutable = resolveBrowserExecutablePath(config.chromePath);
+  if (resolvedExecutable.source === 'brave') {
+    logger(`Chrome not found; falling back to Brave at ${resolvedExecutable.path}`);
+  }
   const launcher = usePatchedLauncher
     ? await launchWithCustomHost({
-        chromeFlags,
-        chromePath: config.chromePath ?? undefined,
-        userDataDir,
-        host: connectHost ?? '127.0.0.1',
-        requestedPort: debugPort ?? undefined,
-      })
+      chromeFlags,
+      chromePath: resolvedExecutable.path ?? undefined,
+      userDataDir,
+      host: connectHost ?? '127.0.0.1',
+      requestedPort: debugPort ?? undefined,
+    })
     : await launch({
-        chromePath: config.chromePath ?? undefined,
-        chromeFlags,
-        userDataDir,
-        handleSIGINT: false,
-        port: debugPort ?? undefined,
-      });
+      chromePath: resolvedExecutable.path ?? undefined,
+      chromeFlags,
+      userDataDir,
+      handleSIGINT: false,
+      port: debugPort ?? undefined,
+    });
   const pidLabel = typeof launcher.pid === 'number' ? ` (pid ${launcher.pid})` : '';
   const hostLabel = connectHost ? ` on ${connectHost}` : '';
   logger(`Launched Chrome${pidLabel} on port ${launcher.port}${hostLabel}`);

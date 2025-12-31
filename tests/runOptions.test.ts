@@ -188,7 +188,27 @@ describe('resolveRunOptionsFromConfig', () => {
         model: 'grok',
         engine: 'browser',
       }),
-    ).toThrow(/Browser engine only supports GPT and Gemini/);
+    ).toThrow(/Browser engine only supports GPT, Gemini, and Genspark/);
+  });
+
+  it('keeps browser engine for genspark runs', () => {
+    const { resolvedEngine, runOptions } = resolveRunOptionsFromConfig({
+      prompt: basePrompt,
+      model: 'genspark',
+      engine: 'browser',
+    });
+    expect(resolvedEngine).toBe('browser');
+    expect(runOptions.model).toBe('genspark');
+  });
+
+  it('rejects api engine for genspark runs', () => {
+    expect(() =>
+      resolveRunOptionsFromConfig({
+        prompt: basePrompt,
+        model: 'genspark',
+        engine: 'api',
+      }),
+    ).toThrow(/Genspark runs are browser-only/);
   });
 
   it('forces api engine for grok when auto-selected browser and applies XAI base url', () => {

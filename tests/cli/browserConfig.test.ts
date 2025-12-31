@@ -5,6 +5,7 @@ describe('buildBrowserConfig', () => {
   test('uses defaults when optional flags omitted', async () => {
     const config = await buildBrowserConfig({ model: 'gpt-5.2-pro' });
     expect(config).toMatchObject({
+      provider: 'chatgpt',
       chromeProfile: 'Default',
       chromePath: null,
       chromeCookiePath: null,
@@ -85,6 +86,15 @@ describe('buildBrowserConfig', () => {
       model: 'gemini-3-pro',
     });
     expect(config.desiredModel).toBe('Gemini 3 Pro');
+  });
+
+  test('sets provider to genspark and skips ChatGPT labels', async () => {
+    const config = await buildBrowserConfig({
+      model: 'genspark',
+      browserProvider: 'genspark',
+    });
+    expect(config.provider).toBe('genspark');
+    expect(config.desiredModel).toBeNull();
   });
 
   test('trims whitespace around override labels', async () => {

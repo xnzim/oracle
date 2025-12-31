@@ -20,6 +20,7 @@ import {
   writeDevToolsActivePort,
 } from '../browser/profileState.js';
 import { normalizeChatgptUrl } from '../browser/utils.js';
+import { defaultBrowserUrl, resolveBrowserProvider } from '../browser/provider.js';
 
 export interface RemoteServerOptions {
   host?: string;
@@ -115,7 +116,9 @@ export async function createRemoteServer(
       const body = await readRequestBody(req);
       payload = JSON.parse(body) as RemoteRunPayload;
       if (payload?.browserConfig) {
-        payload.browserConfig.url = normalizeChatgptUrl(payload.browserConfig.url, CHATGPT_URL);
+        const provider = resolveBrowserProvider(payload.browserConfig);
+        const fallbackUrl = defaultBrowserUrl(provider) ?? CHATGPT_URL;
+        payload.browserConfig.url = normalizeChatgptUrl(payload.browserConfig.url, fallbackUrl);
       }
     } catch (_error) {
       busy = false;

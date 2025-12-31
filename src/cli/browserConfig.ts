@@ -2,10 +2,12 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { BrowserSessionConfig } from '../sessionStore.js';
 import type { ModelName, ThinkingTimeLevel } from '../oracle.js';
-import { CHATGPT_URL, DEFAULT_MODEL_STRATEGY, DEFAULT_MODEL_TARGET, isTemporaryChatUrl, normalizeChatgptUrl, parseDuration } from '../browserMode.js';
+import { DEFAULT_MODEL_STRATEGY, DEFAULT_MODEL_TARGET, isTemporaryChatUrl, normalizeChatgptUrl, parseDuration } from '../browserMode.js';
 import { normalizeBrowserModelStrategy } from '../browser/modelStrategy.js';
 import type { BrowserModelStrategy } from '../browser/types.js';
 import type { CookieParam } from '../browser/types.js';
+import { defaultBrowserUrl, resolveBrowserProvider } from '../browser/provider.js';
+import type { BrowserProvider } from '../browser/provider.js';
 import { getOracleHomeDir } from '../oracleHome.js';
 
 const DEFAULT_BROWSER_TIMEOUT_MS = 1_200_000;
@@ -28,6 +30,7 @@ const BROWSER_MODEL_LABELS: [ModelName, string][] = [
 ];
 
 export interface BrowserFlagOptions {
+  browserProvider?: BrowserProvider;
   browserChromeProfile?: string;
   browserChromePath?: string;
   browserCookiePath?: string;
@@ -87,8 +90,20 @@ export async function buildBrowserConfig(options: BrowserFlagOptions): Promise<B
   const baseModel = options.model.toLowerCase();
   const isChatGptModel = baseModel.startsWith('gpt-') && !baseModel.includes('codex');
   const shouldUseOverride = !isChatGptModel && normalizedOverride.length > 0 && normalizedOverride !== baseModel;
+  const urlHint = options.browserUrl ?? options.chatgptUrl;
+  const provider = resolveBrowserProvider({
+    provider: options.browserProvider,
+    url: urlHint,
+    chatgptUrl: options.chatgptUrl,
+  });
+  const rawUrl =
+    provider === 'chatgpt'
+      ? options.chatgptUrl ?? options.browserUrl
+      : options.browserUrl ?? options.chatgptUrl;
   const modelStrategy =
-    normalizeBrowserModelStrategy(options.browserModelStrategy) ?? DEFAULT_MODEL_STRATEGY;
+    provider === 'chatgpt'
+      ? (normalizeBrowserModelStrategy(options.browserModelStrategy) ?? DEFAULT_MODEL_STRATEGY)
+      : normalizeBrowserModelStrategy(options.browserModelStrategy) ?? 'ignore';
   const cookieNames = parseCookieNames(options.browserCookieNames ?? process.env.ORACLE_BROWSER_COOKIE_NAMES);
   let inline = await resolveInlineCookies({
     inlineArg: options.browserInlineCookies,
@@ -105,16 +120,25 @@ export async function buildBrowserConfig(options: BrowserFlagOptions): Promise<B
   if (options.remoteChrome) {
     remoteChrome = parseRemoteChromeTarget(options.remoteChrome);
   }
-  const rawUrl = options.chatgptUrl ?? options.browserUrl;
-  const url = rawUrl ? normalizeChatgptUrl(rawUrl, CHATGPT_URL) : undefined;
+  const fallbackUrl = defaultBrowserUrl(provider);
+  const url = rawUrl ? normalizeChatgptUrl(rawUrl, fallbackUrl) : undefined;
 
-  const desiredModel = isChatGptModel
-    ? mapModelToBrowserLabel(options.model)
-    : shouldUseOverride
-      ? desiredModelOverride
-      : mapModelToBrowserLabel(options.model);
+  const desiredModel =
+    provider === 'chatgpt'
+      ? isChatGptModel
+        ? mapModelToBrowserLabel(options.model)
+        : shouldUseOverride
+          ? desiredModelOverride
+          : mapModelToBrowserLabel(options.model)
+      : desiredModelOverride?.trim() || null;
 
-  if (modelStrategy === 'select' && url && isTemporaryChatUrl(url) && /\bpro\b/i.test(desiredModel ?? '')) {
+  if (
+    provider === 'chatgpt' &&
+    modelStrategy === 'select' &&
+    url &&
+    isTemporaryChatUrl(url) &&
+    /\bpro\b/i.test(desiredModel ?? '')
+  ) {
     throw new Error(
       'Temporary Chat mode does not expose Pro models in the ChatGPT model picker. ' +
         'Remove "temporary-chat=true" from --chatgpt-url (or omit --chatgpt-url), or use a non-Pro model (e.g. --model gpt-5.2).',
@@ -122,6 +146,7 @@ export async function buildBrowserConfig(options: BrowserFlagOptions): Promise<B
   }
 
   return {
+    provider,
     chromeProfile: options.browserChromeProfile ?? DEFAULT_CHROME_PROFILE,
     chromePath: options.browserChromePath ?? null,
     chromeCookiePath: options.browserCookiePath ?? null,

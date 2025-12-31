@@ -4,6 +4,8 @@ import os from 'node:os';
 import net from 'node:net';
 import { resolveBrowserConfig } from './config.js';
 import type { BrowserRunOptions, BrowserRunResult, BrowserLogger, ChromeClient, BrowserAttachment } from './types.js';
+import { resolveBrowserProvider } from './provider.js';
+import { runGensparkBrowserMode } from './genspark.js';
 import {
   launchChrome,
   registerTerminationHooks,
@@ -54,6 +56,14 @@ export { CHATGPT_URL, DEFAULT_MODEL_STRATEGY, DEFAULT_MODEL_TARGET } from './con
 export { parseDuration, delay, normalizeChatgptUrl, isTemporaryChatUrl } from './utils.js';
 
 export async function runBrowserMode(options: BrowserRunOptions): Promise<BrowserRunResult> {
+  const provider = resolveBrowserProvider(options.config);
+  if (provider === 'genspark') {
+    return runGensparkBrowserMode(options);
+  }
+  return runChatgptBrowserMode(options);
+}
+
+async function runChatgptBrowserMode(options: BrowserRunOptions): Promise<BrowserRunResult> {
   const promptText = options.prompt?.trim();
   if (!promptText) {
     throw new Error('Prompt text is required when using browser mode.');

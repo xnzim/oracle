@@ -2,10 +2,12 @@ import { CHATGPT_URL, DEFAULT_MODEL_STRATEGY, DEFAULT_MODEL_TARGET } from './con
 import { normalizeBrowserModelStrategy } from './modelStrategy.js';
 import type { BrowserAutomationConfig, ResolvedBrowserConfig } from './types.js';
 import { isTemporaryChatUrl, normalizeChatgptUrl } from './utils.js';
+import { defaultBrowserUrl, resolveBrowserProvider } from './provider.js';
 import os from 'node:os';
 import path from 'node:path';
 
 export const DEFAULT_BROWSER_CONFIG: ResolvedBrowserConfig = {
+  provider: 'chatgpt',
   chromeProfile: null,
   chromePath: null,
   chromeCookiePath: null,
@@ -39,14 +41,24 @@ export function resolveBrowserConfig(config: BrowserAutomationConfig | undefined
   const envAllowCookieErrors =
     (process.env.ORACLE_BROWSER_ALLOW_COOKIE_ERRORS ?? '').trim().toLowerCase() === 'true' ||
     (process.env.ORACLE_BROWSER_ALLOW_COOKIE_ERRORS ?? '').trim() === '1';
-  const rawUrl = config?.chatgptUrl ?? config?.url ?? DEFAULT_BROWSER_CONFIG.url;
-  const normalizedUrl = normalizeChatgptUrl(rawUrl ?? DEFAULT_BROWSER_CONFIG.url, DEFAULT_BROWSER_CONFIG.url);
-  const desiredModel = config?.desiredModel ?? DEFAULT_BROWSER_CONFIG.desiredModel ?? DEFAULT_MODEL_TARGET;
+  const provider = resolveBrowserProvider(config);
+  const fallbackUrl = defaultBrowserUrl(provider);
+  const rawUrl =
+    provider === 'chatgpt'
+      ? config?.chatgptUrl ?? config?.url ?? fallbackUrl
+      : config?.url ?? fallbackUrl;
+  const normalizedUrl = normalizeChatgptUrl(rawUrl ?? fallbackUrl, fallbackUrl);
+  const desiredModel =
+    provider === 'chatgpt'
+      ? config?.desiredModel ?? DEFAULT_BROWSER_CONFIG.desiredModel ?? DEFAULT_MODEL_TARGET
+      : config?.desiredModel ?? null;
   const modelStrategy =
-    normalizeBrowserModelStrategy(config?.modelStrategy) ??
-    DEFAULT_BROWSER_CONFIG.modelStrategy ??
-    DEFAULT_MODEL_STRATEGY;
-  if (modelStrategy === 'select' && isTemporaryChatUrl(normalizedUrl) && /\bpro\b/i.test(desiredModel)) {
+    provider === 'chatgpt'
+      ? normalizeBrowserModelStrategy(config?.modelStrategy) ??
+        DEFAULT_BROWSER_CONFIG.modelStrategy ??
+        DEFAULT_MODEL_STRATEGY
+      : normalizeBrowserModelStrategy(config?.modelStrategy) ?? 'ignore';
+  if (provider === 'chatgpt' && modelStrategy === 'select' && isTemporaryChatUrl(normalizedUrl) && /\bpro\b/i.test(desiredModel ?? '')) {
     throw new Error(
       'Temporary Chat mode does not expose Pro models in the ChatGPT model picker. ' +
         'Remove "temporary-chat=true" from your browser URL, or use a non-Pro model label (e.g. "GPT-5.2").',
@@ -62,6 +74,7 @@ export function resolveBrowserConfig(config: BrowserAutomationConfig | undefined
   return {
     ...DEFAULT_BROWSER_CONFIG,
     ...(config ?? {}),
+    provider,
     url: normalizedUrl,
     chatgptUrl: normalizedUrl,
     timeoutMs: config?.timeoutMs ?? DEFAULT_BROWSER_CONFIG.timeoutMs,

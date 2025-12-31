@@ -3,6 +3,7 @@ import path from 'node:path';
 import JSON5 from 'json5';
 import { getOracleHomeDir } from './oracleHome.js';
 import type { BrowserModelStrategy } from './browser/types.js';
+import type { BrowserProvider } from './browser/provider.js';
 import type { ThinkingTimeLevel } from './oracle/types.js';
 
 export type EnginePreference = 'api' | 'browser';
@@ -14,6 +15,7 @@ export interface NotifyConfig {
 }
 
 export interface BrowserConfigDefaults {
+  provider?: BrowserProvider;
   chromeProfile?: string | null;
   chromePath?: string | null;
   chromeCookiePath?: string | null;
@@ -26,6 +28,7 @@ export interface BrowserConfigDefaults {
   headless?: boolean;
   hideWindow?: boolean;
   keepBrowser?: boolean;
+  modelLabel?: string;
   modelStrategy?: BrowserModelStrategy;
   /** Thinking time intensity (ChatGPT Thinking/Pro models): 'light', 'standard', 'extended', 'heavy' */
   thinkingTime?: ThinkingTimeLevel;

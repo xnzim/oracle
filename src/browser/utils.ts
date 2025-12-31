@@ -112,10 +112,10 @@ export function normalizeChatgptUrl(raw: string | null | undefined, fallback: st
   try {
     parsed = new URL(withScheme);
   } catch {
-    throw new Error(`Invalid ChatGPT URL: "${raw}". Provide an absolute http(s) URL.`);
+    throw new Error(`Invalid browser URL: "${raw}". Provide an absolute http(s) URL.`);
   }
   if (!/^https?:$/i.test(parsed.protocol)) {
-    throw new Error(`Invalid ChatGPT URL protocol: "${parsed.protocol}". Use http or https.`);
+    throw new Error(`Invalid browser URL protocol: "${parsed.protocol}". Use http or https.`);
   }
   // Preserve user-provided path/query; URL#toString will normalize trailing slashes appropriately.
   return parsed.toString();

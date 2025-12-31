@@ -2,8 +2,11 @@ import { normalizeChatgptUrl, CHATGPT_URL } from '../browserMode.js';
 import type { UserConfig } from '../config.js';
 import type { ThinkingTimeLevel } from '../oracle.js';
 import type { BrowserModelStrategy } from '../browser/types.js';
+import { defaultBrowserUrl, resolveBrowserProvider } from '../browser/provider.js';
+import type { BrowserProvider } from '../browser/provider.js';
 
 export interface BrowserDefaultsOptions {
+  browserProvider?: BrowserProvider;
   chatgptUrl?: string;
   browserUrl?: string;
   browserChromeProfile?: string;
@@ -16,6 +19,7 @@ export interface BrowserDefaultsOptions {
   browserHeadless?: boolean;
   browserHideWindow?: boolean;
   browserKeepBrowser?: boolean;
+  browserModelLabel?: string;
   browserModelStrategy?: BrowserModelStrategy;
   browserThinkingTime?: ThinkingTimeLevel;
   browserManualLogin?: boolean;
@@ -37,10 +41,28 @@ export function applyBrowserDefaultsFromConfig(
     return source === undefined || source === 'default';
   };
 
-  const configuredChatgptUrl = browser.chatgptUrl ?? browser.url;
-  const cliChatgptSet = options.chatgptUrl !== undefined || options.browserUrl !== undefined;
-  if (isUnset('chatgptUrl') && !cliChatgptSet && configuredChatgptUrl !== undefined) {
-    options.chatgptUrl = normalizeChatgptUrl(configuredChatgptUrl ?? '', CHATGPT_URL);
+  const provider = resolveBrowserProvider({
+    provider: browser.provider,
+    url: browser.url ?? browser.chatgptUrl,
+    chatgptUrl: browser.chatgptUrl,
+  });
+  const configuredUrl =
+    provider === 'chatgpt'
+      ? browser.chatgptUrl ?? browser.url
+      : browser.url ?? browser.chatgptUrl;
+  const fallbackUrl = defaultBrowserUrl(provider);
+  const cliUrlSet = options.chatgptUrl !== undefined || options.browserUrl !== undefined;
+  if (!cliUrlSet && configuredUrl !== undefined) {
+    if (provider === 'chatgpt' && isUnset('chatgptUrl')) {
+      options.chatgptUrl = normalizeChatgptUrl(configuredUrl ?? '', fallbackUrl ?? CHATGPT_URL);
+    }
+    if (provider === 'genspark' && isUnset('browserUrl')) {
+      options.browserUrl = normalizeChatgptUrl(configuredUrl ?? '', fallbackUrl ?? CHATGPT_URL);
+    }
+  }
+
+  if (isUnset('browserProvider') && browser.provider !== undefined) {
+    options.browserProvider = browser.provider ?? undefined;
   }
 
   if (isUnset('browserChromeProfile') && browser.chromeProfile !== undefined) {
@@ -75,6 +97,9 @@ export function applyBrowserDefaultsFromConfig(
   }
   if (isUnset('browserKeepBrowser') && browser.keepBrowser !== undefined) {
     options.browserKeepBrowser = browser.keepBrowser;
+  }
+  if (isUnset('browserModelLabel') && browser.modelLabel !== undefined) {
+    options.browserModelLabel = browser.modelLabel ?? undefined;
   }
   if (isUnset('browserModelStrategy') && browser.modelStrategy !== undefined) {
     options.browserModelStrategy = browser.modelStrategy;

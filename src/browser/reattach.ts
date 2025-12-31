@@ -16,6 +16,7 @@ import { launchChrome, connectToChrome, hideChromeWindow } from './chromeLifecyc
 import { resolveBrowserConfig } from './config.js';
 import { syncCookies } from './cookies.js';
 import { CHATGPT_URL } from './constants.js';
+import { resolveBrowserProvider } from './provider.js';
 import { cleanupStaleProfileState } from './profileState.js';
 import {
   pickTarget,
@@ -52,6 +53,10 @@ export async function resumeBrowserSession(
   logger: BrowserLogger,
   deps: ReattachDeps = {},
 ): Promise<ReattachResult> {
+  const provider = resolveBrowserProvider(config);
+  if (provider !== 'chatgpt') {
+    throw new Error('Reattach is only supported for ChatGPT browser sessions right now.');
+  }
   const recoverSession =
     deps.recoverSession ??
     (async (runtimeMeta, configMeta) =>

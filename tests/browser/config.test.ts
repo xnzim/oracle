@@ -6,6 +6,7 @@ describe('resolveBrowserConfig', () => {
   test('returns defaults when config missing', () => {
     const resolved = resolveBrowserConfig(undefined);
     expect(resolved.url).toBe(CHATGPT_URL);
+    expect(resolved.provider).toBe('chatgpt');
     const isWindows = process.platform === 'win32';
     expect(resolved.cookieSync).toBe(!isWindows);
     expect(resolved.headless).toBe(false);
@@ -42,5 +43,11 @@ describe('resolveBrowserConfig', () => {
         desiredModel: 'GPT-5.2 Pro',
       }),
     ).toThrow(/Temporary Chat/i);
+  });
+
+  test('defaults to genspark URL when provider is genspark', () => {
+    const resolved = resolveBrowserConfig({ provider: 'genspark' });
+    expect(resolved.url).toBe('https://www.genspark.ai/agents?type=ai_chat');
+    expect(resolved.provider).toBe('genspark');
   });
 });

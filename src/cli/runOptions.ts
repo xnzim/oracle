@@ -55,18 +55,33 @@ export function resolveRunOptionsFromConfig({
     normalizedRequestedModels.length > 0
       ? Array.from(new Set(normalizedRequestedModels.map((entry) => resolveApiModel(entry))))
       : [resolvedModel];
-  const isBrowserCompatible = (m: string) => m.startsWith('gpt-') || m.startsWith('gemini');
+  const isBrowserCompatible = (m: string) =>
+    m.startsWith('gpt-') || m.startsWith('gemini') || m.startsWith('genspark');
+  const includesGenspark = allModels.some((model) => model.startsWith('genspark'));
   const hasNonBrowserCompatibleTarget = (browserRequested || browserConfigured) && allModels.some((m) => !isBrowserCompatible(m));
   if (hasNonBrowserCompatibleTarget) {
     throw new PromptValidationError(
-      'Browser engine only supports GPT and Gemini models. Re-run with --engine api for Grok, Claude, or other models.',
+      'Browser engine only supports GPT, Gemini, and Genspark. Re-run with --engine api for Grok, Claude, or other models.',
       { engine: 'browser', models: allModels },
+    );
+  }
+  if (normalizedRequestedModels.length > 0 && includesGenspark) {
+    throw new PromptValidationError(
+      'Genspark runs are browser-only and cannot be used with --models.',
+      { engine: 'api', models: allModels },
     );
   }
 
   const engineCoercedToApi = engineWasBrowser && (isCodex || isClaude || isGrok);
   const fixedEngine: EngineMode =
     isCodex || isClaude || isGrok || normalizedRequestedModels.length > 0 ? 'api' : resolvedEngine;
+
+  if (fixedEngine === 'api' && includesGenspark) {
+    throw new PromptValidationError(
+      'Genspark runs are browser-only. Re-run with --engine browser and --browser-provider genspark.',
+      { engine: fixedEngine, model: resolvedModel, models: allModels },
+    );
+  }
 
   const promptWithSuffix =
     userConfig?.promptSuffix && userConfig.promptSuffix.trim().length > 0

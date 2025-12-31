@@ -18,16 +18,18 @@ Oracle reads an optional per-user config from `~/.oracle/config.json`. The file 
   },
 
   browser: {
+    provider: "chatgpt", // chatgpt | genspark
     chromeProfile: "Default",
     chromePath: null,
     chromeCookiePath: null,
     chatgptUrl: "https://chatgpt.com/", // root is fine; folder URLs also work
-    url: null, // alias for chatgptUrl (kept for back-compat)
+    url: null, // alias for chatgptUrl (use for https://www.genspark.ai/agents?type=ai_chat when provider is genspark)
     debugPort: null,          // fixed DevTools port (env: ORACLE_BROWSER_PORT / ORACLE_BROWSER_DEBUG_PORT)
     timeoutMs: 1200000,
     inputTimeoutMs: 30000,
     cookieSyncWaitMs: 0,      // wait (ms) before retrying cookie sync when Chrome cookies are empty/locked
-    modelStrategy: "select", // select | current | ignore (ChatGPT only; ignored for Gemini web)
+    modelLabel: null,        // optional model label override for browser pickers
+    modelStrategy: "select", // select | current | ignore (ChatGPT only; ignored for Gemini/Genspark)
     thinkingTime: "extended", // light | standard | extended | heavy (ChatGPT Thinking/Pro models)
     manualLogin: false,        // set true to reuse a persistent automation profile and sign in once (Windows defaults to true when unset)
     manualLoginProfileDir: null, // override profile dir (or set ORACLE_BROWSER_PROFILE_DIR)
@@ -69,7 +71,9 @@ CLI flags → `config.json` → environment → built-in defaults.
 - `OPENAI_API_KEY` only influences engine selection when neither the CLI nor `config.json` specify an engine (API when present, otherwise browser).
 - `ORACLE_NOTIFY*` env vars still layer on top of the config’s `notify` block.
 - `sessionRetentionHours` controls the default value for `--retain-hours`. When unset, `ORACLE_RETAIN_HOURS` (if present) becomes the fallback, and the CLI flag still wins over both.
-- `browser.chatgptUrl` accepts either the root ChatGPT URL (`https://chatgpt.com/`) or a folder/workspace URL (e.g., `https://chatgpt.com/g/.../project`); `browser.url` remains as a legacy alias.
+- `browser.provider` sets the browser target (`chatgpt` by default; use `genspark` for `https://www.genspark.ai/agents?type=ai_chat`).
+- `browser.modelLabel` overrides the model label used by browser pickers (handy for Genspark’s model menu).
+- `browser.chatgptUrl` accepts either the root ChatGPT URL (`https://chatgpt.com/`) or a folder/workspace URL (e.g., `https://chatgpt.com/g/.../project`); `browser.url` remains as a legacy alias (and is the preferred field for non-ChatGPT providers).
 - Browser automation defaults can be set under `browser.*`, including `browser.manualLogin`, `browser.manualLoginProfileDir`, and `browser.thinkingTime` (CLI override: `--browser-thinking-time`). On Windows, `browser.manualLogin` defaults to `true` when omitted.
 
 If the config is missing or invalid, Oracle falls back to defaults and prints a warning for parse errors.

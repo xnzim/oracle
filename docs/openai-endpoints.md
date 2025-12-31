@@ -59,7 +59,7 @@ Notes:
 
 ### Browser engine vs API base URLs
 
-`--base-url` / `apiBaseUrl` only affect API runs. For browser automation, use `--chatgpt-url` (or `browser.chatgptUrl` in config) to point Chrome at a specific ChatGPT workspace/folder such as `https://chatgpt.com/g/.../project`.
+`--base-url` / `apiBaseUrl` only affect API runs. For browser automation, use `--chatgpt-url` (or `browser.chatgptUrl` in config) to point Chrome at a specific ChatGPT workspace/folder such as `https://chatgpt.com/g/.../project`. For non-ChatGPT targets (e.g., Genspark), set `--browser-provider genspark` and/or `--browser-url`.
 
 ### Example: LiteLLM
 
