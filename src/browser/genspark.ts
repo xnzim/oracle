@@ -714,40 +714,44 @@ async function uploadGensparkAttachments(
   if (!contexts.length) {
     contexts = [];
   }
-  let target = await resolveGensparkFileInput(Runtime, Input, contexts, logger);
-  if (!target) {
-    throw new BrowserAutomationError('Unable to locate a Genspark file attachment input.', {
-      stage: 'execute-browser',
-      details: { provider: 'genspark' },
-    });
-  }
-  if (attachments.length > 1 && target.multiple === false) {
-    throw new BrowserAutomationError(
-      'Genspark file input does not accept multiple files. Use --browser-bundle-files or pass a single file.',
-      { stage: 'execute-browser', details: { provider: 'genspark' } },
-    );
-  }
-
-  for (const attachment of attachments) {
-    target = (await resolveGensparkFileInput(Runtime, Input, contexts, logger)) ?? target;
-    logger(`Uploading attachment: ${attachment.displayPath}`);
-    const transferResult = await transferAttachmentViaDataTransfer(Runtime, attachment, target.selector, {
-      contextId: target.contextId,
-      append: true,
-    });
-    if (transferResult.alreadyPresent) {
-      log(`Attachment already queued: ${transferResult.fileName}`);
-      continue;
+  try {
+    let target = await resolveGensparkFileInput(Runtime, Input, contexts, logger);
+    if (!target) {
+      throw new BrowserAutomationError('Unable to locate a Genspark file attachment input.', {
+        stage: 'execute-browser',
+        details: { provider: 'genspark' },
+      });
     }
-    await waitForGensparkAttachmentQueued(
-      Runtime,
-      target.selector,
-      path.basename(attachment.path),
-      target.contextId,
-      15_000,
-      logger,
-    );
-    await delay(250);
+    if (attachments.length > 1 && target.multiple === false) {
+      throw new BrowserAutomationError(
+        'Genspark file input does not accept multiple files. Use --browser-bundle-files or pass a single file.',
+        { stage: 'execute-browser', details: { provider: 'genspark' } },
+      );
+    }
+
+    for (const attachment of attachments) {
+      target = (await resolveGensparkFileInput(Runtime, Input, contexts, logger)) ?? target;
+      logger(`Uploading attachment: ${attachment.displayPath}`);
+      const transferResult = await transferAttachmentViaDataTransfer(Runtime, attachment, target.selector, {
+        contextId: target.contextId,
+        append: true,
+      });
+      if (transferResult.alreadyPresent) {
+        log(`Attachment already queued: ${transferResult.fileName}`);
+        continue;
+      }
+      await waitForGensparkAttachmentQueued(
+        Runtime,
+        target.selector,
+        path.basename(attachment.path),
+        target.contextId,
+        15_000,
+        logger,
+      );
+      await delay(250);
+    }
+  } finally {
+    await clearGensparkFilePickerGuard(Runtime, contexts);
   }
 }
 
@@ -793,6 +797,13 @@ async function resolveGensparkFileInput(
   }
 
   return null;
+}
+
+async function clearGensparkFilePickerGuard(
+  Runtime: ChromeClient['Runtime'],
+  contexts: number[],
+): Promise<void> {
+  await evaluateInContexts(Runtime, contexts, buildGensparkFilePickerGuardClearExpression());
 }
 
 async function waitForGensparkAttachmentQueued(
@@ -1545,6 +1556,28 @@ function buildGensparkFileInputExpression(): string {
       if (menuSelector && node.closest?.(menuSelector)) return true;
       return false;
     };
+    const installPickerGuard = () => {
+      try {
+        const win = window;
+        if (!win.__oracleFilePickerGuard) {
+          win.__oracleFilePickerGuard = {
+            click: HTMLInputElement.prototype.click,
+            showOpenFilePicker: typeof win.showOpenFilePicker === 'function' ? win.showOpenFilePicker : null,
+          };
+          HTMLInputElement.prototype.click = function () {
+            if (this && this.type === 'file') return;
+            return win.__oracleFilePickerGuard.click.call(this);
+          };
+          if (win.__oracleFilePickerGuard.showOpenFilePicker) {
+            win.showOpenFilePicker = async () => {
+              throw new Error('blocked');
+            };
+          }
+        }
+      } catch {
+        // ignore guard failures
+      }
+    };
     const markInput = (input) => {
       if (!(input instanceof HTMLInputElement) || input.type !== 'file') return null;
       input.setAttribute('data-oracle-genspark-input', 'true');
@@ -1619,7 +1652,9 @@ function buildGensparkFileInputExpression(): string {
       return markInput(menuItem.input);
     }
     if (menuItem?.node) {
-      return { found: false, reason: 'menu-no-input' };
+      installPickerGuard();
+      dispatchClickSequence(menuItem.node);
+      return { found: false, clicked: true, reason: 'menu' };
     }
 
     const candidates = [];
@@ -1658,9 +1693,33 @@ function buildGensparkFileInputExpression(): string {
       if (after) return markInput(after);
       const afterMenu = findMenuItem();
       if (afterMenu?.input) return markInput(afterMenu.input);
+      if (afterMenu?.node) {
+        installPickerGuard();
+        dispatchClickSequence(afterMenu.node);
+        return { found: false, clicked: true, reason: 'menu' };
+      }
       return { found: false, clicked: true };
     }
     return { found: false, reason: 'no-input' };
+  })()`;
+}
+
+function buildGensparkFilePickerGuardClearExpression(): string {
+  return `(() => {
+    try {
+      const win = window;
+      const guard = win.__oracleFilePickerGuard;
+      if (guard && guard.click) {
+        HTMLInputElement.prototype.click = guard.click;
+      }
+      if (guard && guard.showOpenFilePicker) {
+        win.showOpenFilePicker = guard.showOpenFilePicker;
+      }
+      delete win.__oracleFilePickerGuard;
+    } catch {
+      // ignore restore failures
+    }
+    return { cleared: true };
   })()`;
 }
 
