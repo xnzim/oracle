@@ -1496,6 +1496,7 @@ function buildGensparkFileInputExpression(): string {
     const menuSelectors = ${menuSelectorsLiteral};
     const keywords = /(upload|attach|attachment|file|paperclip|clip)/i;
     const localKeywords = /(browse\\s+local\\s+files|local\\s+files|from\\s+computer|from\\s+device|upload\\s+from\\s+computer)/i;
+    const menuSelector = menuSelectors.join(',');
     const collectRoots = (root) => {
       const roots = [root];
       const stack = [root];
@@ -1538,6 +1539,12 @@ function buildGensparkFileInputExpression(): string {
       if (node.getAttribute?.('aria-disabled') === 'true') return true;
       return node.classList.contains('disabled');
     };
+    const isMenuNode = (node) => {
+      if (!node || !(node instanceof HTMLElement)) return false;
+      if (menuSelector && node.matches?.(menuSelector)) return true;
+      if (menuSelector && node.closest?.(menuSelector)) return true;
+      return false;
+    };
     const markInput = (input) => {
       if (!(input instanceof HTMLInputElement) || input.type !== 'file') return null;
       input.setAttribute('data-oracle-genspark-input', 'true');
@@ -1563,6 +1570,22 @@ function buildGensparkFileInputExpression(): string {
       return markInput(existing);
     }
 
+    const findInputNear = (node) => {
+      if (!node || !(node instanceof HTMLElement)) return null;
+      const direct = node.querySelector?.('input[type="file"]');
+      if (direct instanceof HTMLInputElement) return direct;
+      const container = node.closest?.('.upload-options-popover, .upload-from-multiple-source-container, .upload-attachments');
+      if (container) {
+        const nested = container.querySelector?.('input[type="file"]');
+        if (nested instanceof HTMLInputElement) return nested;
+      }
+      const parent = node.parentElement;
+      if (parent) {
+        const sibling = parent.querySelector?.('input[type="file"]');
+        if (sibling instanceof HTMLInputElement) return sibling;
+      }
+      return null;
+    };
     const findMenuItem = () => {
       const items = [];
       for (const selector of menuSelectors) {
@@ -1581,21 +1604,22 @@ function buildGensparkFileInputExpression(): string {
                 : '';
           const label = [text, aria, title, testId, className].filter(Boolean).join(' ').trim();
           if (!label) continue;
+          const input = findInputNear(node);
           if (localKeywords.test(label)) {
-            return node;
+            return { node, input };
           }
-          items.push(node);
+          items.push({ node, input });
         }
       }
       return items.length > 0 ? items[0] : null;
     };
 
     const menuItem = findMenuItem();
-    if (menuItem) {
-      dispatchClickSequence(menuItem);
-      const afterMenu = findInput();
-      if (afterMenu) return markInput(afterMenu);
-      return { found: false, clicked: true, reason: 'menu' };
+    if (menuItem?.input) {
+      return markInput(menuItem.input);
+    }
+    if (menuItem?.node) {
+      return { found: false, reason: 'menu-no-input' };
     }
 
     const candidates = [];
@@ -1603,6 +1627,7 @@ function buildGensparkFileInputExpression(): string {
       const nodes = queryAllDeep(selector);
       for (const node of nodes) {
         if (!isVisible(node) || isDisabled(node)) continue;
+        if (isMenuNode(node)) continue;
         candidates.push(node);
       }
     }
@@ -1610,6 +1635,7 @@ function buildGensparkFileInputExpression(): string {
       const buttons = queryAllDeep('button, [role="button"]');
       for (const node of buttons) {
         if (!isVisible(node) || isDisabled(node)) continue;
+        if (isMenuNode(node)) continue;
         const text = (node.innerText || node.textContent || '').trim();
         const aria = node.getAttribute?.('aria-label') || '';
         const title = node.getAttribute?.('title') || '';
@@ -1630,6 +1656,8 @@ function buildGensparkFileInputExpression(): string {
       dispatchClickSequence(candidates[0]);
       const after = findInput();
       if (after) return markInput(after);
+      const afterMenu = findMenuItem();
+      if (afterMenu?.input) return markInput(afterMenu.input);
       return { found: false, clicked: true };
     }
     return { found: false, reason: 'no-input' };
@@ -1638,12 +1666,9 @@ function buildGensparkFileInputExpression(): string {
 
 function buildGensparkAttachmentTriggerTargetExpression(): string {
   const selectorsLiteral = JSON.stringify(GENSPARK_ATTACHMENT_TRIGGER_SELECTORS);
-  const menuSelectorsLiteral = JSON.stringify(GENSPARK_ATTACHMENT_MENU_SELECTORS);
   return `(() => {
     const selectors = ${selectorsLiteral};
-    const menuSelectors = ${menuSelectorsLiteral};
     const keywords = /(upload|attach|attachment|file|paperclip|clip)/i;
-    const localKeywords = /(browse\\s+local\\s+files|local\\s+files|from\\s+computer|from\\s+device|upload\\s+from\\s+computer)/i;
     const collectRoots = (root) => {
       const roots = [root];
       const stack = [root];
@@ -1700,29 +1725,6 @@ function buildGensparkAttachmentTriggerTargetExpression(): string {
       return { x, y };
     };
     const candidates = [];
-    for (const selector of menuSelectors) {
-      const nodes = queryAllDeep(selector);
-      for (const node of nodes) {
-        if (!isVisible(node) || isDisabled(node)) continue;
-        const text = (node.innerText || node.textContent || '').trim();
-        const aria = node.getAttribute?.('aria-label') || '';
-        const title = node.getAttribute?.('title') || '';
-        const testId = node.getAttribute?.('data-testid') || '';
-        const className =
-          typeof node.className === 'string'
-            ? node.className
-            : node.className && typeof node.className.baseVal === 'string'
-              ? node.className.baseVal
-              : '';
-        const label = [text, aria, title, testId, className].filter(Boolean).join(' ').trim();
-        if (!label) continue;
-        if (!localKeywords.test(label)) continue;
-        const target = toTarget(node);
-        if (!target) continue;
-        return { found: true, label, target };
-      }
-    }
-
     for (const selector of selectors) {
       const nodes = queryAllDeep(selector);
       for (const node of nodes) {
