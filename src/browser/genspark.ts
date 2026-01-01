@@ -58,6 +58,12 @@ const GENSPARK_FILE_INPUT_SELECTORS = [
 ];
 
 const GENSPARK_ATTACHMENT_TRIGGER_SELECTORS = [
+  '.upload-trigger-button',
+  '.upload-attachments',
+  '.upload-from-multiple-source-container',
+  '.input-icon',
+  '.icon-group',
+  '.cursor-pointer',
   'button[aria-label*="upload" i]',
   'button[aria-label*="attach" i]',
   'button[aria-label*="attachment" i]',
@@ -73,6 +79,9 @@ const GENSPARK_ATTACHMENT_TRIGGER_SELECTORS = [
   '[data-testid*="upload"]',
   '[data-testid*="attachment"]',
   '[data-testid*="file"]',
+  '[class*="upload-"]',
+  '[class*="attachment"]',
+  '[class*="file"]',
 ];
 
 const GENSPARK_RESPONSE_SELECTORS = [
@@ -741,7 +750,7 @@ async function resolveGensparkFileInput(
   logger: BrowserLogger,
 ): Promise<{ selector: string; contextId?: number; multiple?: boolean } | null> {
   const log = logger.verbose ? logger : () => {};
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  for (let attempt = 0; attempt < 4; attempt += 1) {
     const results = await evaluateInContextsWithIds(Runtime, contexts, buildGensparkFileInputExpression());
     const found = results.find((result) => result.value && (result.value as { found?: boolean }).found);
     if (found?.value && typeof found.value === 'object') {
@@ -752,7 +761,7 @@ async function resolveGensparkFileInput(
     }
     const clicked = results.some((result) => result.value && (result.value as { clicked?: boolean }).clicked);
     if (clicked) {
-      await delay(300);
+      await delay(500);
       continue;
     }
     break;
@@ -764,7 +773,7 @@ async function resolveGensparkFileInput(
   if (targetResult?.target) {
     log('Retrying Genspark attachment picker click via native mouse event.');
     await dispatchNativeClick(Input, targetResult.target);
-    await delay(400);
+    await delay(600);
     const results = await evaluateInContextsWithIds(Runtime, contexts, buildGensparkFileInputExpression());
     const found = results.find((result) => result.value && (result.value as { found?: boolean }).found);
     if (found?.value && typeof found.value === 'object') {
@@ -1558,7 +1567,14 @@ function buildGensparkFileInputExpression(): string {
         const text = (node.innerText || node.textContent || '').trim();
         const aria = node.getAttribute?.('aria-label') || '';
         const title = node.getAttribute?.('title') || '';
-        const label = [text, aria, title].filter(Boolean).join(' ').trim();
+        const testId = node.getAttribute?.('data-testid') || '';
+        const className =
+          typeof node.className === 'string'
+            ? node.className
+            : node.className && typeof node.className.baseVal === 'string'
+              ? node.className.baseVal
+              : '';
+        const label = [text, aria, title, testId, className].filter(Boolean).join(' ').trim();
         if (keywords.test(label)) {
           candidates.push(node);
         }
@@ -1642,7 +1658,14 @@ function buildGensparkAttachmentTriggerTargetExpression(): string {
         const text = (node.innerText || node.textContent || '').trim();
         const aria = node.getAttribute?.('aria-label') || '';
         const title = node.getAttribute?.('title') || '';
-        const label = [text, aria, title].filter(Boolean).join(' ').trim();
+        const testId = node.getAttribute?.('data-testid') || '';
+        const className =
+          typeof node.className === 'string'
+            ? node.className
+            : node.className && typeof node.className.baseVal === 'string'
+              ? node.className.baseVal
+              : '';
+        const label = [text, aria, title, testId, className].filter(Boolean).join(' ').trim();
         if (!label) continue;
         if (!keywords.test(label)) continue;
         candidates.push({ node, label });
@@ -1655,7 +1678,14 @@ function buildGensparkAttachmentTriggerTargetExpression(): string {
         const text = (node.innerText || node.textContent || '').trim();
         const aria = node.getAttribute?.('aria-label') || '';
         const title = node.getAttribute?.('title') || '';
-        const label = [text, aria, title].filter(Boolean).join(' ').trim();
+        const testId = node.getAttribute?.('data-testid') || '';
+        const className =
+          typeof node.className === 'string'
+            ? node.className
+            : node.className && typeof node.className.baseVal === 'string'
+              ? node.className.baseVal
+              : '';
+        const label = [text, aria, title, testId, className].filter(Boolean).join(' ').trim();
         if (!label) continue;
         if (!keywords.test(label)) continue;
         candidates.push({ node, label });
