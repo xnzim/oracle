@@ -714,6 +714,7 @@ async function uploadGensparkAttachments(
   if (!contexts.length) {
     contexts = [];
   }
+  await installGensparkFilePickerGuard(Runtime, contexts);
   try {
     let target = await resolveGensparkFileInput(Runtime, Input, contexts, logger);
     if (!target) {
@@ -729,13 +730,36 @@ async function uploadGensparkAttachments(
       );
     }
 
+    const transferWithRetry = async (
+      attachment: BrowserAttachment,
+      currentTarget: { selector: string; contextId?: number },
+    ) => {
+      try {
+        return await transferAttachmentViaDataTransfer(Runtime, attachment, currentTarget.selector, {
+          contextId: currentTarget.contextId,
+          append: true,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (!/context/i.test(message)) {
+          throw error;
+        }
+        contexts = await resolveGensparkExecutionContexts(Page, log);
+        const refreshed = await resolveGensparkFileInput(Runtime, Input, contexts, logger);
+        if (refreshed?.selector) {
+          return await transferAttachmentViaDataTransfer(Runtime, attachment, refreshed.selector, {
+            contextId: refreshed.contextId,
+            append: true,
+          });
+        }
+        return await transferAttachmentViaDataTransfer(Runtime, attachment, currentTarget.selector, { append: true });
+      }
+    };
+
     for (const attachment of attachments) {
       target = (await resolveGensparkFileInput(Runtime, Input, contexts, logger)) ?? target;
       logger(`Uploading attachment: ${attachment.displayPath}`);
-      const transferResult = await transferAttachmentViaDataTransfer(Runtime, attachment, target.selector, {
-        contextId: target.contextId,
-        append: true,
-      });
+      const transferResult = await transferWithRetry(attachment, target);
       if (transferResult.alreadyPresent) {
         log(`Attachment already queued: ${transferResult.fileName}`);
         continue;
@@ -779,23 +803,6 @@ async function resolveGensparkFileInput(
     break;
   }
 
-  const targetResult = findTargetInContextResults(
-    await evaluateInContextsWithIds(Runtime, contexts, buildGensparkAttachmentTriggerTargetExpression()),
-  );
-  if (targetResult?.target) {
-    log('Retrying Genspark attachment picker click via native mouse event.');
-    await dispatchNativeClick(Input, targetResult.target);
-    await delay(600);
-    const results = await evaluateInContextsWithIds(Runtime, contexts, buildGensparkFileInputExpression());
-    const found = results.find((result) => result.value && (result.value as { found?: boolean }).found);
-    if (found?.value && typeof found.value === 'object') {
-      const value = found.value as { selector?: string; multiple?: boolean };
-      if (value.selector) {
-        return { selector: value.selector, multiple: value.multiple, contextId: found.contextId };
-      }
-    }
-  }
-
   return null;
 }
 
@@ -803,7 +810,16 @@ async function clearGensparkFilePickerGuard(
   Runtime: ChromeClient['Runtime'],
   contexts: number[],
 ): Promise<void> {
+  await Runtime.evaluate({ expression: buildGensparkFilePickerGuardClearExpression(), returnByValue: true });
   await evaluateInContexts(Runtime, contexts, buildGensparkFilePickerGuardClearExpression());
+}
+
+async function installGensparkFilePickerGuard(
+  Runtime: ChromeClient['Runtime'],
+  contexts: number[],
+): Promise<void> {
+  await Runtime.evaluate({ expression: buildGensparkFilePickerGuardInstallExpression(), returnByValue: true });
+  await evaluateInContexts(Runtime, contexts, buildGensparkFilePickerGuardInstallExpression());
 }
 
 async function waitForGensparkAttachmentQueued(
@@ -1556,28 +1572,6 @@ function buildGensparkFileInputExpression(): string {
       if (menuSelector && node.closest?.(menuSelector)) return true;
       return false;
     };
-    const installPickerGuard = () => {
-      try {
-        const win = window;
-        if (!win.__oracleFilePickerGuard) {
-          win.__oracleFilePickerGuard = {
-            click: HTMLInputElement.prototype.click,
-            showOpenFilePicker: typeof win.showOpenFilePicker === 'function' ? win.showOpenFilePicker : null,
-          };
-          HTMLInputElement.prototype.click = function () {
-            if (this && this.type === 'file') return;
-            return win.__oracleFilePickerGuard.click.call(this);
-          };
-          if (win.__oracleFilePickerGuard.showOpenFilePicker) {
-            win.showOpenFilePicker = async () => {
-              throw new Error('blocked');
-            };
-          }
-        }
-      } catch {
-        // ignore guard failures
-      }
-    };
     const markInput = (input) => {
       if (!(input instanceof HTMLInputElement) || input.type !== 'file') return null;
       input.setAttribute('data-oracle-genspark-input', 'true');
@@ -1652,7 +1646,6 @@ function buildGensparkFileInputExpression(): string {
       return markInput(menuItem.input);
     }
     if (menuItem?.node) {
-      installPickerGuard();
       dispatchClickSequence(menuItem.node);
       return { found: false, clicked: true, reason: 'menu' };
     }
@@ -1694,7 +1687,6 @@ function buildGensparkFileInputExpression(): string {
       const afterMenu = findMenuItem();
       if (afterMenu?.input) return markInput(afterMenu.input);
       if (afterMenu?.node) {
-        installPickerGuard();
         dispatchClickSequence(afterMenu.node);
         return { found: false, clicked: true, reason: 'menu' };
       }
@@ -1720,6 +1712,32 @@ function buildGensparkFilePickerGuardClearExpression(): string {
       // ignore restore failures
     }
     return { cleared: true };
+  })()`;
+}
+
+function buildGensparkFilePickerGuardInstallExpression(): string {
+  return `(() => {
+    try {
+      const win = window;
+      if (!win.__oracleFilePickerGuard) {
+        win.__oracleFilePickerGuard = {
+          click: HTMLInputElement.prototype.click,
+          showOpenFilePicker: typeof win.showOpenFilePicker === 'function' ? win.showOpenFilePicker : null,
+        };
+        HTMLInputElement.prototype.click = function () {
+          if (this && this.type === 'file') return;
+          return win.__oracleFilePickerGuard.click.call(this);
+        };
+        if (win.__oracleFilePickerGuard.showOpenFilePicker) {
+          win.showOpenFilePicker = async () => {
+            throw new Error('blocked');
+          };
+        }
+      }
+    } catch {
+      // ignore guard failures
+    }
+    return { installed: true };
   })()`;
 }
 
