@@ -905,6 +905,10 @@ async function waitForGensparkResponse(
   while (Date.now() < deadline) {
     const snapshot = await readLatestAssistantSnapshot(Runtime, promptText);
     const text = snapshot.text;
+    if (snapshot.busy || snapshot.tool) {
+      await delay(500);
+      continue;
+    }
     if (text && text !== baselineText) {
       if (text === lastText) {
         stableCount += 1;
@@ -929,14 +933,16 @@ async function waitForGensparkResponse(
 async function readLatestAssistantSnapshot(
   Runtime: ChromeClient['Runtime'],
   promptText: string,
-): Promise<{ text: string; html: string }> {
+): Promise<{ text: string; html: string; busy: boolean; tool: boolean }> {
   const { result } = await Runtime.evaluate({
     expression: buildLatestAssistantExpression(promptText),
     returnByValue: true,
   });
   const text = result?.value?.text ?? '';
   const html = result?.value?.html ?? '';
-  return { text, html };
+  const busy = Boolean(result?.value?.busy);
+  const tool = Boolean(result?.value?.tool);
+  return { text, html, busy, tool };
 }
 
 function buildPromptPresenceExpression(): string {
@@ -1976,6 +1982,67 @@ function buildLatestAssistantExpression(promptText: string): string {
       return cleaned.join('\\n').trim();
     };
     const promptNormalized = normalize(promptRaw);
+    const isVisible = (node) => {
+      if (!node || !(node instanceof HTMLElement)) return false;
+      const style = window.getComputedStyle(node);
+      if (style.visibility === 'hidden' || style.display === 'none') return false;
+      const rect = node.getBoundingClientRect();
+      return rect.width > 4 && rect.height > 4;
+    };
+    const hasBusyIndicator = (root) => {
+      if (!root) return false;
+      if (root.querySelector('[aria-busy="true"], [role="progressbar"], .spinner, .loading, .dots, .typing')) {
+        return true;
+      }
+      const buttons = Array.from(root.querySelectorAll('button, [role="button"]'));
+      for (const button of buttons) {
+        if (!isVisible(button)) continue;
+        const label = [
+          button.textContent || '',
+          button.getAttribute?.('aria-label') || '',
+          button.getAttribute?.('title') || '',
+        ]
+          .join(' ')
+          .trim();
+        const normalized = normalize(label);
+        if (!normalized) continue;
+        if (normalized === 'stop' || normalized.startsWith('stop ') || normalized.includes('stop generating')) {
+          return true;
+        }
+        if (normalized.includes('cancel') || normalized.includes('abort')) {
+          return true;
+        }
+      }
+      return false;
+    };
+    const isToolNode = (node, text) => {
+      if (!node || !(node instanceof HTMLElement)) return false;
+      const toolSelectors = [
+        '[data-tool]',
+        '[data-tool-name]',
+        '[data-tool-type]',
+        '[data-message-type*="tool"]',
+        '[data-testid*="tool"]',
+        '[data-testid*="search"]',
+        '[class*="tool-"]',
+        '[class*="tool_"]',
+        '[class*="web-search"]',
+        '[class*="search"]',
+        '[class*="browse"]',
+      ];
+      if (node.querySelector(toolSelectors.join(','))) return true;
+      const normalized = normalize(text);
+      if (!normalized) return false;
+      if (normalized.length <= 120) {
+        if (/(search web|web search|searching|browsing|using tool|tool call|calling tool|retrieving|fetching|reading|opening|querying|looking up|gathering)/.test(normalized)) {
+          return true;
+        }
+        if (/^(sources?|citations?|tools?)$/.test(normalized)) {
+          return true;
+        }
+      }
+      return false;
+    };
     const isPlaceholder = (text, node) => {
       const normalized = normalize(text);
       if (!normalized) return true;
@@ -2005,8 +2072,10 @@ function buildLatestAssistantExpression(promptText: string): string {
       return false;
     };
     const root = document.querySelector('main') ?? document.body;
-    if (!root) return { text: '', html: '' };
+    if (!root) return { text: '', html: '', busy: false, tool: false };
     const nodes = Array.from(root.querySelectorAll(selectors.join(',')));
+    const busy = hasBusyIndicator(root);
+    let sawTool = false;
     for (let i = nodes.length - 1; i >= 0; i -= 1) {
       const node = nodes[i];
       if (!node || !(node instanceof HTMLElement)) continue;
@@ -2014,9 +2083,13 @@ function buildLatestAssistantExpression(promptText: string): string {
       if (!text) continue;
       if (isPlaceholder(text, node)) continue;
       if (shouldSkip(text)) continue;
-      return { text, html: node.innerHTML ?? '' };
+      if (isToolNode(node, text)) {
+        sawTool = true;
+        continue;
+      }
+      return { text, html: node.innerHTML ?? '', busy, tool: false };
     }
-    return { text: '', html: '' };
+    return { text: '', html: '', busy, tool: sawTool };
   })()`;
 }
 
