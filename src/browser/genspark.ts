@@ -104,6 +104,9 @@ const GENSPARK_RESPONSE_SELECTORS = [
   'article',
 ];
 
+const GENSPARK_ATTACHMENT_QUEUE_TIMEOUT_MS = 7_000;
+const GENSPARK_ATTACHMENT_QUEUE_DELAY_MS = 100;
+
 const GENSPARK_MODEL_TRIGGER_SELECTORS = [
   '[role="combobox"]',
   'button[aria-haspopup="listbox"]',
@@ -769,10 +772,10 @@ async function uploadGensparkAttachments(
         target.selector,
         path.basename(attachment.path),
         target.contextId,
-        15_000,
+        GENSPARK_ATTACHMENT_QUEUE_TIMEOUT_MS,
         logger,
       );
-      await delay(250);
+      await delay(GENSPARK_ATTACHMENT_QUEUE_DELAY_MS);
     }
   } finally {
     await clearGensparkFilePickerGuard(Runtime, contexts);
