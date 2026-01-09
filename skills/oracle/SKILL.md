@@ -39,8 +39,9 @@ Recommended defaults:
   - `npx -y @steipete/oracle --engine browser --model gpt-5.2-pro -p "<task>" --file "src/**"`
 
 - Browser run (Genspark GPT-5.2 Pro):
-  - `npx -y @steipete/oracle --engine browser --browser-provider genspark --browser-model-label "GPT-5.2 Pro" --model genspark -p "<task>" --file "src/**"`
+  - `npx -y @steipete/oracle --engine browser --browser-provider genspark --browser-model-label "GPT-5.2 Pro" --model genspark --wait --browser-timeout 1h -p "<task>" --file "src/**"`
   - If prompted to log in, rerun with `--browser-manual-login --browser-keep-browser` once.
+  - When running from an agent, do not return early; keep waiting until the answer arrives or the browser timeout is reached.
 
 - Manual paste fallback (assemble bundle, copy to clipboard):
   - `npx -y @steipete/oracle --render --copy -p "<task>" --file "src/**"`
@@ -78,6 +79,10 @@ Recommended defaults:
 - **API runs require explicit user consent** before starting because they incur usage costs.
 - Browser attachments:
   - `--browser-attachments auto|never|always` (auto pastes inline up to ~60k chars then uploads; use `always` to force file uploads).
+
+## Local build note
+
+If you run the local binary (`node dist/bin/oracle-cli.js`), build once per session with `pnpm run build`. No need to rebuild before every Genspark call unless code changed.
 - Remote browser host (signed-in machine runs automation):
   - Host: `oracle serve --host 0.0.0.0 --port 9473 --token <secret>`
   - Client: `oracle --engine browser --remote-host <host:port> --remote-token <secret> -p "<task>" --file "src/**"`

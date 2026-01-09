@@ -139,6 +139,7 @@ export function guessMimeType(fileName: string): string {
     '.ts': 'text/typescript',
     '.jsx': 'text/javascript',
     '.tsx': 'text/typescript',
+    '.swift': 'text/x-swift',
     '.py': 'text/x-python',
     '.java': 'text/x-java',
     '.c': 'text/x-c',
