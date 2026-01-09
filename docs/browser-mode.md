@@ -213,7 +213,7 @@ This mode is ideal when you have a macOS VM (or spare Mac mini) logged into Chat
 
 ## Limitations / Follow-Up Plan
 
-- **Genspark uploads** – Genspark browser runs do not support file uploads yet. Use `--browser-attachments never` / `--browser-inline-files` to inline file contents, or switch to the ChatGPT browser engine when you need uploads.
+- **Genspark uploads** – Genspark browser runs support file uploads via the file input (DataTransfer, 20 MB per file). If uploads fail or the OS file picker appears, rerun with `--browser-keep-browser` and retry once, or fall back to `--browser-attachments never` / `--browser-inline-files` to inline file contents.
 - **Reattach scope** – `oracle session <id>` reattach only works for ChatGPT browser runs today.
 - **Attachment lifecycle** – in `auto` mode we prefer inlining files into the composer (fewer moving parts). When we do upload, each `--file` path is uploaded separately (or bundled) so ChatGPT can ingest filenames/content. The automation waits for uploads to finish (send button enabled, upload chips visible) before submitting. When inline paste is rejected by ChatGPT (too large), Oracle retries automatically with uploads.
 - **Model picker drift** – we rely on heuristics to pick GPT-5.2 variants. If OpenAI changes the DOM we need to refresh the selectors quickly. Consider snapshot tests or a small “self check” command.

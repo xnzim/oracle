@@ -95,6 +95,10 @@ function renderHelpFooter(program: Command, colors: HelpColors): string {
       'Run multiple API models in one go and aggregate cost/usage.',
     ),
     formatExample(
+      `${program.name()} --engine browser --browser-provider genspark --browser-model-label "GPT-5.2 Pro" --model genspark --prompt "Summarize the incident notes" --file "docs/incidents/*.md"`,
+      'Run a browser automation session against Genspark (GPT-5.2 Pro) with file context.',
+    ),
+    formatExample(
       `${program.name()} status --hours 72 --limit 50`,
       'Show sessions from the last 72h (capped at 50 entries).',
     ),

@@ -12,3 +12,5 @@ vendor/oracle-notifier/OracleNotifier.app
 vendor/oracle-notifier/OracleIcon.icns
 vendor/oracle-notifier/OracleIcon.iconset
 /.claude
+skills/oracle-genspark-browser/
+skills/oracle-genspark-local/

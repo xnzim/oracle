@@ -1964,11 +1964,40 @@ function buildLatestAssistantExpression(promptText: string): string {
     const promptRaw = ${promptLiteral};
     const normalize = (value) =>
       (value || '').toLowerCase().replace(/\\s+/g, ' ').trim();
+    const stripAuxLabels = (text) => {
+      if (!text) return '';
+      const lines = text.split(/\\r?\\n/);
+      const cleaned = lines.filter((line) => {
+        const normalized = (line || '').trim().toLowerCase();
+        if (!normalized) return false;
+        if (normalized === 'save to notion') return false;
+        return true;
+      });
+      return cleaned.join('\\n').trim();
+    };
     const promptNormalized = normalize(promptRaw);
+    const isPlaceholder = (text, node) => {
+      const normalized = normalize(text);
+      if (!normalized) return true;
+      if (normalized === 'thinking' || normalized === 'thinking...' || normalized === 'loading' || normalized === 'loading...') {
+        return true;
+      }
+      if (normalized.startsWith('thinking') && normalized.length <= 12) return true;
+      if (node && node.querySelector) {
+        const busy = node.querySelector('[aria-busy="true"], [role="progressbar"], .spinner, .loading, .dots, .typing');
+        if (busy) return true;
+      }
+      return false;
+    };
     const shouldSkip = (text) => {
       if (!promptNormalized) return false;
       const normalized = normalize(text);
       if (normalized === promptNormalized) return true;
+      if (normalized.startsWith(promptNormalized)) {
+        const remainder = normalized.slice(promptNormalized.length).trim();
+        if (remainder.length < 32) return true;
+        return false;
+      }
       if (promptNormalized.length > 32) {
         const prefix = promptNormalized.slice(0, Math.min(160, promptNormalized.length));
         if (normalized.startsWith(prefix)) return true;
@@ -1981,8 +2010,9 @@ function buildLatestAssistantExpression(promptText: string): string {
     for (let i = nodes.length - 1; i >= 0; i -= 1) {
       const node = nodes[i];
       if (!node || !(node instanceof HTMLElement)) continue;
-      const text = (node.innerText || '').trim();
+      const text = stripAuxLabels(node.innerText || '');
       if (!text) continue;
+      if (isPlaceholder(text, node)) continue;
       if (shouldSkip(text)) continue;
       return { text, html: node.innerHTML ?? '' };
     }

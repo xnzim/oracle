@@ -38,6 +38,10 @@ Recommended defaults:
 - Browser run (main path; long-running is normal):
   - `npx -y @steipete/oracle --engine browser --model gpt-5.2-pro -p "<task>" --file "src/**"`
 
+- Browser run (Genspark GPT-5.2 Pro):
+  - `npx -y @steipete/oracle --engine browser --browser-provider genspark --browser-model-label "GPT-5.2 Pro" --model genspark -p "<task>" --file "src/**"`
+  - If prompted to log in, rerun with `--browser-manual-login --browser-keep-browser` once.
+
 - Manual paste fallback (assemble bundle, copy to clipboard):
   - `npx -y @steipete/oracle --render --copy -p "<task>" --file "src/**"`
   - Note: `--copy` is a hidden alias for `--copy-markdown`.
@@ -70,10 +74,10 @@ Recommended defaults:
 ## Engines (API vs browser)
 
 - Auto-pick: uses `api` when `OPENAI_API_KEY` is set, otherwise `browser`.
-- Browser engine supports GPT + Gemini only; use `--engine api` for Claude/Grok/Codex or multi-model runs.
+- Browser engine supports GPT + Gemini + Genspark; use `--engine api` for Claude/Grok/Codex or multi-model runs.
 - **API runs require explicit user consent** before starting because they incur usage costs.
 - Browser attachments:
-  - `--browser-attachments auto|never|always` (auto pastes inline up to ~60k chars then uploads).
+  - `--browser-attachments auto|never|always` (auto pastes inline up to ~60k chars then uploads; use `always` to force file uploads).
 - Remote browser host (signed-in machine runs automation):
   - Host: `oracle serve --host 0.0.0.0 --port 9473 --token <secret>`
   - Client: `oracle --engine browser --remote-host <host:port> --remote-token <secret> -p "<task>" --file "src/**"`

@@ -466,6 +466,10 @@ Examples:
   oracle --engine browser --prompt "Review the TS data layer" \\
     --file "src/**/*.ts" --file "!src/**/*.test.ts"
 
+  # Browser run (Genspark GPT-5.2 Pro)
+  oracle --engine browser --browser-provider genspark --browser-model-label "GPT-5.2 Pro" \\
+    --model genspark --prompt "Summarize the incident notes" --file "docs/incidents/*.md"
+
   # Build, print, and copy a markdown bundle (semi-manual)
   oracle --render --copy -p "Review the TS data layer" --file "src/**/*.ts" --file "!src/**/*.test.ts"
 `,
