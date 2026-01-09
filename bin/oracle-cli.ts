@@ -46,7 +46,7 @@ import { copyToClipboard } from '../src/cli/clipboard.js';
 import { buildMarkdownBundle } from '../src/cli/markdownBundle.js';
 import { shouldDetachSession } from '../src/cli/detach.js';
 import { applyHiddenAliases } from '../src/cli/hiddenAliases.js';
-import { buildBrowserConfig, resolveBrowserModelLabel } from '../src/cli/browserConfig.js';
+import { buildBrowserConfig, resolveBrowserModelLabel, resolveGensparkModelLabel } from '../src/cli/browserConfig.js';
 import { performSessionRun } from '../src/cli/sessionRunner.js';
 import type { BrowserSessionRunnerDeps } from '../src/browser/sessionRunner.js';
 import { isMediaFile } from '../src/browser/prompt.js';
@@ -807,22 +807,33 @@ async function runRootCommand(options: CliOptions): Promise<void> {
     }
   }
 
+  const browserProviderHint = resolveBrowserProvider({
+    provider: options.browserProvider ?? userConfig.browser?.provider,
+    url: options.browserUrl ?? userConfig.browser?.url,
+    chatgptUrl: options.chatgptUrl ?? userConfig.browser?.chatgptUrl,
+  });
+  const gensparkBrowserRequested = browserProviderHint === 'genspark';
+
   const normalizedMultiModels: ModelName[] = multiModelProvided
     ? Array.from(new Set(options.models!.map((entry) => resolveApiModel(entry))))
     : [];
   const cliModelArg = normalizeModelOption(options.model) || (multiModelProvided ? '' : DEFAULT_MODEL);
   const resolvedModelCandidate: ModelName = multiModelProvided
     ? normalizedMultiModels[0]
-    : engine === 'browser'
+    : engine === 'browser' && !gensparkBrowserRequested
       ? inferModelFromLabel(cliModelArg || DEFAULT_MODEL)
       : resolveApiModel(cliModelArg || DEFAULT_MODEL);
   const primaryModelCandidate = normalizedMultiModels[0] ?? resolvedModelCandidate;
-  const isGemini = primaryModelCandidate.startsWith('gemini');
-  const isGenspark = primaryModelCandidate.startsWith('genspark');
+  const normalizedPrimaryModel = gensparkBrowserRequested ? ('genspark' as ModelName) : primaryModelCandidate;
+  const isGemini = normalizedPrimaryModel.startsWith('gemini');
+  const isGenspark = normalizedPrimaryModel.startsWith('genspark');
   const multiModelsIncludeGenspark = normalizedMultiModels.some((model) => model.startsWith('genspark'));
-  const isCodex = primaryModelCandidate.startsWith('gpt-5.1-codex');
-  const isClaude = primaryModelCandidate.startsWith('claude');
+  const isCodex = normalizedPrimaryModel.startsWith('gpt-5.1-codex');
+  const isClaude = normalizedPrimaryModel.startsWith('claude');
   const userForcedBrowser = options.browser || options.engine === 'browser';
+  if (gensparkBrowserRequested && normalizedMultiModels.length > 0) {
+    throw new Error('Genspark runs are browser-only and cannot be used with --models.');
+  }
   if (multiModelsIncludeGenspark) {
     throw new Error('Genspark runs are browser-only and cannot be used with --models.');
   }
@@ -832,8 +843,9 @@ async function runRootCommand(options: CliOptions): Promise<void> {
     }
     engine = 'browser';
   }
+  const allowAnyBrowserModel = gensparkBrowserRequested;
   const isBrowserCompatible = (model: string) =>
-    model.startsWith('gpt-') || model.startsWith('gemini') || model.startsWith('genspark');
+    allowAnyBrowserModel || model.startsWith('gpt-') || model.startsWith('gemini') || model.startsWith('genspark');
   const hasNonBrowserCompatibleTarget =
     (engine === 'browser' || userForcedBrowser) &&
     (normalizedMultiModels.length > 0
@@ -858,8 +870,9 @@ async function runRootCommand(options: CliOptions): Promise<void> {
   if (remoteHost && normalizedMultiModels.length > 0) {
     throw new Error('--remote-host does not support --models yet. Use API engine locally instead.');
   }
-  const resolvedModel: ModelName =
-    normalizedMultiModels[0] ?? (isGemini ? resolveApiModel(cliModelArg) : resolvedModelCandidate);
+  const resolvedModel: ModelName = gensparkBrowserRequested
+    ? 'genspark'
+    : (normalizedMultiModels[0] ?? (isGemini ? resolveApiModel(cliModelArg) : resolvedModelCandidate));
   const effectiveModelId = resolvedModel.startsWith('gemini')
     ? resolveGeminiModelId(resolvedModel)
     : isKnownModel(resolvedModel)
@@ -1048,7 +1061,11 @@ async function runRootCommand(options: CliOptions): Promise<void> {
   const browserModelLabelOverride =
     sessionMode === 'browser'
       ? options.browserModelLabel ??
-        (browserProvider === 'chatgpt' ? resolveBrowserModelLabel(cliModelArg, resolvedModel) : undefined)
+        (browserProvider === 'chatgpt'
+          ? resolveBrowserModelLabel(cliModelArg, resolvedModel)
+          : browserProvider === 'genspark'
+            ? resolveGensparkModelLabel(cliModelArg)
+            : undefined)
       : undefined;
   const browserConfig =
     sessionMode === 'browser'

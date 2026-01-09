@@ -36,16 +36,23 @@ export function resolveRunOptionsFromConfig({
   const resolvedEngine = resolveEngineWithConfig({ engine, configEngine: userConfig?.engine, env });
   const browserRequested = engine === 'browser';
   const browserConfigured = userConfig?.engine === 'browser';
+  const browserProvider = userConfig?.browser?.provider;
+  const gensparkProvider = browserProvider === 'genspark';
   const requestedModelList = Array.isArray(models) ? models : [];
   const normalizedRequestedModels = requestedModelList.map((entry) => normalizeModelOption(entry)).filter(Boolean);
 
   const cliModelArg = normalizeModelOption(model ?? userConfig?.model) || DEFAULT_MODEL;
   const inferredModel =
-    resolvedEngine === 'browser' && normalizedRequestedModels.length === 0
+    resolvedEngine === 'browser' && normalizedRequestedModels.length === 0 && !gensparkProvider
       ? inferModelFromLabel(cliModelArg)
       : resolveApiModel(cliModelArg);
   // Browser engine maps Pro/legacy aliases to the latest ChatGPT picker targets (GPT-5.2 / GPT-5.2 Pro).
-  const resolvedModel = resolvedEngine === 'browser' ? normalizeChatGptModelForBrowser(inferredModel) : inferredModel;
+  const resolvedModel =
+    resolvedEngine === 'browser'
+      ? gensparkProvider
+        ? ('genspark' as ModelName)
+        : normalizeChatGptModelForBrowser(inferredModel)
+      : inferredModel;
   const isCodex = resolvedModel.startsWith('gpt-5.1-codex');
   const isClaude = resolvedModel.startsWith('claude');
   const isGrok = resolvedModel.startsWith('grok');
@@ -55,8 +62,9 @@ export function resolveRunOptionsFromConfig({
     normalizedRequestedModels.length > 0
       ? Array.from(new Set(normalizedRequestedModels.map((entry) => resolveApiModel(entry))))
       : [resolvedModel];
+  const allowAnyBrowserModel = gensparkProvider && resolvedEngine === 'browser';
   const isBrowserCompatible = (m: string) =>
-    m.startsWith('gpt-') || m.startsWith('gemini') || m.startsWith('genspark');
+    allowAnyBrowserModel || m.startsWith('gpt-') || m.startsWith('gemini') || m.startsWith('genspark');
   const includesGenspark = allModels.some((model) => model.startsWith('genspark'));
   const hasNonBrowserCompatibleTarget = (browserRequested || browserConfigured) && allModels.some((m) => !isBrowserCompatible(m));
   if (hasNonBrowserCompatibleTarget) {

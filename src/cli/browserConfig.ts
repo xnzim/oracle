@@ -29,6 +29,22 @@ const BROWSER_MODEL_LABELS: [ModelName, string][] = [
   ['gemini-3-pro', 'Gemini 3 Pro'],
 ];
 
+const GENSPARK_MODEL_LABELS: Array<[RegExp, string]> = [
+  [/mixture[-\s]*of[-\s]*agents|moa/, 'Mixture-of-Agents'],
+  [/gpt[-\s]*5(\.0)?[-\s]*pro/, 'GPT-5 Pro'],
+  [/gpt[-\s]*5\.?1[-\s]*instant/, 'GPT-5.1 Instant'],
+  [/gpt[-\s]*5\.?2[-\s]*pro/, 'GPT-5.2 Pro'],
+  [/gpt[-\s]*5\.?2(?!.*pro)/, 'GPT-5.2'],
+  [/o3[-\s]*pro/, 'o3-pro'],
+  [/claude.*sonnet.*4\.5|sonnet.*4\.5/, 'Claude Sonnet 4.5'],
+  [/claude.*opus.*4\.5|opus.*4\.5/, 'Claude Opus 4.5'],
+  [/claude.*haiku.*4\.5|haiku.*4\.5/, 'Claude Haiku 4.5'],
+  [/gemini.*2\.5.*pro/, 'Gemini 2.5 Pro'],
+  [/gemini.*3.*flash.*preview/, 'Gemini 3 Flash Preview'],
+  [/gemini.*3.*pro.*preview/, 'Gemini 3 Pro Preview'],
+  [/grok\s*4\s*0709|grok4\s*0709|grok-4-0709|grok4-0709/, 'Grok4 0709'],
+];
+
 export interface BrowserFlagOptions {
   browserProvider?: BrowserProvider;
   browserChromeProfile?: string;
@@ -204,6 +220,19 @@ export function resolveBrowserModelLabel(input: string | undefined, model: Model
   const normalizedInput = trimmed.toLowerCase();
   if (normalizedInput === model.toLowerCase()) {
     return mapModelToBrowserLabel(model);
+  }
+  return trimmed;
+}
+
+export function resolveGensparkModelLabel(input: string | undefined): string | undefined {
+  const trimmed = input?.trim?.() ?? '';
+  if (!trimmed) return undefined;
+  const normalized = trimmed.toLowerCase();
+  if (normalized.includes('genspark')) return undefined;
+  for (const [pattern, label] of GENSPARK_MODEL_LABELS) {
+    if (pattern.test(normalized)) {
+      return label;
+    }
   }
   return trimmed;
 }
