@@ -66,6 +66,7 @@ Recommended defaults:
   - Does not follow symlinks (glob expansion uses `followSymbolicLinks: false`).
   - Dotfiles are filtered unless you explicitly opt in with a pattern that includes a dot-segment (e.g. `--file ".github/**"`).
   - Hard cap: files > 1 MB are rejected (split files or narrow the match).
+  - If Genspark rejects `.swift` uploads, wrap the contents in a temporary `.md` file and attach that instead.
 
 ## Budget + observability
 
