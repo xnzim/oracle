@@ -39,8 +39,8 @@ Recommended defaults:
   - `npx -y @steipete/oracle --engine browser --model gpt-5.2-pro -p "<task>" --file "src/**"`
 
 - Browser run (Genspark GPT-5.2 Pro):
-  - `npx -y @steipete/oracle --engine browser --browser-provider genspark --browser-model-label "GPT-5.2 Pro" --model genspark --wait --browser-timeout 1h -p "<task>" --file "src/**"`
-  - If prompted to log in, rerun with `--browser-manual-login --browser-keep-browser` once.
+  - `npx -y @steipete/oracle --engine browser --browser-provider genspark --browser-model-label "GPT-5.2 Pro" --model genspark --wait --browser-timeout 1h --browser-manual-login --browser-keep-browser -p "<task>" --file "src/**"`
+  - Once the persistent profile is logged in, you can drop `--browser-manual-login --browser-keep-browser` if you prefer a temporary profile.
   - When running from an agent, do not return early; keep waiting until the answer arrives or the browser timeout is reached.
   - If the browser opens but nothing happens, the profile is likely not logged in or cookies were blocked; use `--browser-manual-login --browser-keep-browser` and sign in.
 
