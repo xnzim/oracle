@@ -39,12 +39,13 @@ Recommended defaults:
   - `npx -y @steipete/oracle --engine browser --model gpt-5.2-pro -p "<task>" --file "src/**"`
 
 - Browser run (Genspark GPT-5.2 Pro):
-  - `npx -y @steipete/oracle --engine browser --browser-provider genspark --browser-model-label "GPT-5.2 Pro" --browser-attachments always --model genspark --wait --browser-timeout 1h --browser-manual-login --browser-keep-browser -p "<task>" --file "src/**"`
+  - `npx -y @steipete/oracle --engine browser --browser-provider genspark --genspark-model "GPT-5.2 Pro" --browser-attachments always --model genspark --wait --browser-timeout 1h --browser-manual-login --browser-keep-browser -p "<task>" --file "src/**"`
   - Once the persistent profile is logged in, you can drop `--browser-manual-login --browser-keep-browser` if you prefer a temporary profile.
   - When running from an agent, do not return early; keep waiting until the answer arrives or the browser timeout is reached.
   - If the browser opens but nothing happens, the profile is likely not logged in or cookies were blocked; use `--browser-manual-login --browser-keep-browser` and sign in.
   - Genspark model labels you can select: `Mixture-of-Agents`, `GPT-5 Pro`, `GPT-5.1 Instant`, `GPT-5.2`, `GPT-5.2 Pro`, `o3-pro`, `Claude Sonnet 4.5`, `Claude Opus 4.5`, `Claude Haiku 4.5`, `Gemini 2.5 Pro`, `Gemini 3 Flash Preview`, `Gemini 3 Pro Preview`, `Grok4 0709`.
-  - You can pass these via `--browser-model-label` or just use `--model "<label>"` with `--browser-provider genspark` (it maps to the picker label).
+  - You can pass these via `--genspark-model` or `--browser-model-label`, or use `--model "<label>"` with `--browser-provider genspark` (it maps to the picker label).
+  - For higher-quality answers, prefer GPT Pro models (non o-series) over the o-series.
 
 - Manual paste fallback (assemble bundle, copy to clipboard):
   - `npx -y @steipete/oracle --render --copy -p "<task>" --file "src/**"`

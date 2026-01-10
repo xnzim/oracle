@@ -110,6 +110,7 @@ interface CliOptions extends OptionValues {
   browserCookiePath?: string;
   browserProvider?: BrowserProvider;
   browserModelLabel?: string;
+  gensparkModel?: string;
   chatgptUrl?: string;
   browserUrl?: string;
   browserTimeout?: string;
@@ -347,6 +348,7 @@ program
       .choices(['chatgpt', 'genspark']),
   )
   .addOption(new Option('--browser-model-label <label>', 'Override the model label used by browser pickers.'))
+  .addOption(new Option('--genspark-model <label>', 'Select a model from the Genspark picker (browser mode only).'))
   .addOption(
     new Option(
       '--chatgpt-url <url>',
@@ -467,7 +469,7 @@ Examples:
     --file "src/**/*.ts" --file "!src/**/*.test.ts"
 
   # Browser run (Genspark GPT-5.2 Pro)
-  oracle --engine browser --browser-provider genspark --browser-model-label "GPT-5.2 Pro" \\
+  oracle --engine browser --browser-provider genspark --genspark-model "GPT-5.2 Pro" \\
     --model genspark --prompt "Summarize the incident notes" --file "docs/incidents/*.md"
 
   # Build, print, and copy a markdown bundle (semi-manual)
@@ -1064,7 +1066,7 @@ async function runRootCommand(options: CliOptions): Promise<void> {
         (browserProvider === 'chatgpt'
           ? resolveBrowserModelLabel(cliModelArg, resolvedModel)
           : browserProvider === 'genspark'
-            ? resolveGensparkModelLabel(cliModelArg)
+            ? (options.gensparkModel ?? resolveGensparkModelLabel(cliModelArg))
             : undefined)
       : undefined;
   const browserConfig =
@@ -1324,6 +1326,7 @@ function printDebugHelp(cliName: string): void {
     ['--browser-chrome-path <path>', 'Point to a custom Chrome/Chromium binary.'],
     ['--browser-cookie-path <path>', 'Use a specific Chrome/Chromium cookie store file.'],
     ['--browser-provider <provider>', 'Browser automation target (chatgpt or genspark).'],
+    ['--genspark-model <label>', 'Select a model from the Genspark picker (browser mode only).'],
     ['--browser-url <url>', 'Override the browser target URL (alias for --chatgpt-url).'],
     ['--browser-timeout <ms|s|m>', 'Cap total wait time for the assistant response.'],
     ['--browser-input-timeout <ms|s|m>', 'Cap how long we wait for the composer textarea.'],
